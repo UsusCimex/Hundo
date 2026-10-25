@@ -79,12 +79,19 @@ public sealed class AchievementRowViewModel : ObservableObject
     /// <summary>A guide tells how to get a hidden achievement even when Steam gave no description: blurred the same way.</summary>
     public bool IsTipHidden => _row.Def.Hidden && !_row.IsDone && _owner.HideSpoilers && !_owner.IsRevealed(ApiName);
 
+    private IReadOnlyList<GuidePictureViewModel>? _pictures;
+
+    /// <summary>The tip's pictures, loaded when first asked for: only the selected achievement shows them.</summary>
+    public IReadOnlyList<GuidePictureViewModel> GuidePictures => _pictures ??= (Tip?.Pictures ?? []).Select(u => new GuidePictureViewModel(u)).ToList();
+
     public void RefreshGuide()
     {
+        _pictures = null;
         OnPropertyChanged(nameof(HasGuideTip));
         OnPropertyChanged(nameof(GuideText));
         OnPropertyChanged(nameof(GuideSource));
         OnPropertyChanged(nameof(CanTranslate));
+        OnPropertyChanged(nameof(GuidePictures));
     }
 
     public bool IsHidden => _row.Def.Hidden;

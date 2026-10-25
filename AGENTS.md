@@ -69,7 +69,7 @@ The app was first called Achievement Companion: the data folder, the DPAPI entro
 | `library.json` | library cache |
 | `unlock_log.jsonl` | log of writes to Steam |
 | `app.log` | errors and starts, moved to `app.log.1` at 1 MB |
-| `cache/guides/<appid>.json` | quotes from Steam guides per achievement, with the guide, author and section, and their translations; read again after a month |
+| `cache/guides/<appid>.json` | quotes from Steam guides per achievement, with the guide, author, section and pictures, and their translations; read again after a month or when `GuideTips.CurrentFormat` changes |
 | `cache/images/` | images, trimmed to 200 MB at 300 MB |
 
 ### Sources
@@ -82,7 +82,7 @@ The app was first called Achievement Companion: the data folder, the DPAPI entro
 | Status | `GetPlayerAchievements` (key and public "Game details") or the Steam client |
 | Library | `GetOwnedGames` (key); fresh playtime of one game - the same call with `appids_filter` |
 | Own sample | authors of `store.steampowered.com/appreviews/<appid>` and their `GetPlayerAchievements`; collected on its own only when nobody has percentages, at most once a week |
-| Guide quotes | `IPublishedFileService/QueryFiles` (key): guides tagged Achievements and the language, up to 5 by title, until every achievement has words; `GetSubSectionData`: sections in BBCode; authors from `GetPlayerSummaries`. The content language first, then English with English names from the local schema or `GetSchemaForGame` |
+| Guide quotes | `IPublishedFileService/QueryFiles` (key): guides tagged Achievements and the language, up to 5 by title, until every achievement has words; `GetSubSectionData`: sections in BBCode; pictures from its tags and links, `[previewimg]` ones from the uploads (`return_previews`), without icons by size; authors from `GetPlayerSummaries`. The content language first, then English with English names from the local schema or `GetSchemaForGame` |
 | Translation of quotes | on a click: `translate.googleapis.com/translate_a/single?client=gtx`, Google Translate's keyless web endpoint (not an official API); when it does not answer, the translator's page in the browser |
 | Store art | `store_item_assets/steam/apps/<appid>/header.jpg`; newer apps keep it in a hashed folder: `IStoreBrowseService/GetItems`, else the store's `appdetails` |
 | Running game and new unlocks | registry `RunningAppID`, watching `appcache/stats/UserGameStats_<accountid>_<appid>.bin` and polling on a timer |

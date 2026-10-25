@@ -1,0 +1,36 @@
+<Window x:Class="AC.App.PictureWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:AC.App"
+        AutomationProperties.AutomationId="PictureWindow"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" MinWidth="480" MinHeight="320"
+        Background="{DynamicResource SolidBackgroundFillColorBaseBrush}" PreviewKeyDown="OnKey">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border x:Name="Stage" ClipToBounds="True" Background="Transparent"
+                MouseWheel="OnWheel" MouseLeftButtonDown="OnPress" MouseMove="OnDrag" MouseLeftButtonUp="OnRelease">
+            <Grid>
+                <Image x:Name="Picture" Stretch="Uniform" RenderTransformOrigin="0,0" RenderOptions.BitmapScalingMode="HighQuality">
+                    <Image.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform x:Name="Zoom" />
+                            <TranslateTransform x:Name="Shift" />
+                        </TransformGroup>
+                    </Image.RenderTransform>
+                </Image>
+                <TextBlock x:Name="Status" HorizontalAlignment="Center" VerticalAlignment="Center" Style="{StaticResource Muted}" />
+            </Grid>
+        </Border>
+
+        <DockPanel Grid.Row="1" Margin="14,8,14,10">
+            <Button DockPanel.Dock="Right" Content="{local:Tr picture.browser}" Padding="10,4" Click="OnOpenInBrowser" />
+            <TextBlock x:Name="Counter" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,0"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <TextBlock Text="{local:Tr picture.hint}" Style="{StaticResource Caption}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        </DockPanel>
+    </Grid>
+</Window>

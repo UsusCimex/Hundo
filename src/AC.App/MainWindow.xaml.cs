@@ -72,6 +72,13 @@ public partial class MainWindow : Window
         _vm.StatusMessage = Loc.T("status.settingsSaved");
     }
 
+    /// <summary>A guide picture opens larger, with the tip's other pictures to page through.</summary>
+    private void OnOpenPicture(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: GuidePictureViewModel picture } && _vm.SelectedRow is { } row)
+            new PictureWindow(row.GuidePictures, picture, row.Name, this).ShowDialog();
+    }
+
     /// <summary>The list context menu only holds Steam writes; no writes, no menu.</summary>
     private void OnAchievementMenuOpening(object sender, ContextMenuEventArgs e)
     {

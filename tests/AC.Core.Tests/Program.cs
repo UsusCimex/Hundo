@@ -831,6 +831,30 @@ static class Tests
         Assert.Equal("Mr. Mayor||Use the D-Pad on the wall.|A Secret Legend", string.Join("|", unclosed.Select(l => l.Text)));
     }
 
+    public static void Guides_FindsPictures()
+    {
+        var lines = GuideParser.Lines("""
+            [b]Mercy[/b]
+            [img]https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1/icon.jpg[/img] Spare the guard.
+            [screenshot=3261043900;sizeThumb,floatLeft;https://images.steamusercontent.com/ugc/1/AB/][/screenshot]
+            [previewimg=11;sizeFull,inline;map.png][/previewimg][previewimg=12;sizeThumb,inline;berry.png][/previewimg][previewicon=13;sizeThumb,inline;ui.png]
+            See [url=https://i.imgur.com/x.gif]this[/url] or https://example.com/route.jpg, not https://example.com/wiki
+            [img]https://example.com/a.png[/img]
+            """, [new GuidePicture("11", "https://images.steamusercontent.com/ugc/2/CD/", 90_000), new GuidePicture("12", "https://x/berry", 400),
+            new GuidePicture("13", "https://x/ui", 90_000)]);
+        Assert.Equal("Mercy|Spare the guard.|||See this or https://example.com/route.jpg, not https://example.com/wiki|",
+            string.Join("|", lines.Select(l => l.Text)));
+        Assert.Equal("|||https://images.steamusercontent.com/ugc/1/AB/|https://images.steamusercontent.com/ugc/2/CD/" +
+            "|https://i.imgur.com/x.gif,https://example.com/route.jpg|https://example.com/a.png",
+            "|" + string.Join("|", lines.Select(l => string.Join(",", l.Pictures))));
+
+        var tips = GuideMatcher.Match(new GuidePage(1, "Guide", "Ann", [new GuideSection("2", "", lines)]), "english",
+            [new GuideAchievement("M", "Mercy", "")]);
+        Assert.Equal(5, tips["M"].Pictures.Count);
+        Assert.True(GuideParser.WorthShowing(1920, 1080) && GuideParser.WorthShowing(200, 600), "screenshots and tall maps");
+        Assert.True(!GuideParser.WorthShowing(240, 240) && !GuideParser.WorthShowing(536, 91), "icons and pop-up banners");
+    }
+
     public static void Guides_QuotesTheAchievementsEntry()
     {
         var section = new GuideSection("7", "Story", GuideParser.Lines("""
@@ -1021,9 +1045,13 @@ static class Tests
         var dir = Path.Combine(Path.GetTempPath(), "ac-test-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var tip = new GuideTip(42, "All achievements", "Ann", "english", "7", 0, "Jump twice");
-            new AC.Infrastructure.JsonStore(dir).SaveGuides(5, new GuideTips { Language = "english", FetchedAt = DateTimeOffset.Now, Tips = { ["A"] = tip } });
-            Assert.Equal(tip, new AC.Infrastructure.JsonStore(dir).LoadGuides(5)!.Tips["A"]);
+            var tip = new GuideTip(42, "All achievements", "Ann", "english", "7", 0, "Jump twice") { Pictures = ["https://example.com/a.png"] };
+            new AC.Infrastructure.JsonStore(dir).SaveGuides(5, new GuideTips
+                { Format = GuideTips.CurrentFormat, Language = "english", FetchedAt = DateTimeOffset.Now, Tips = { ["A"] = tip } });
+            var kept = new AC.Infrastructure.JsonStore(dir).LoadGuides(5)!;
+            Assert.Equal(GuideTips.CurrentFormat, kept.Format);
+            Assert.Equal(tip, kept.Tips["A"] with { Pictures = tip.Pictures });
+            Assert.True(kept.Tips["A"].Pictures.SequenceEqual(tip.Pictures), "pictures survive");
         }
         finally
         {

@@ -251,7 +251,8 @@ public sealed class GameService
     public async Task<GuideTips?> GetGuideTipsAsync(GameData game, CancellationToken ct = default)
     {
         var kept = _store.LoadGuides(game.AppId);
-        bool fresh = kept is not null && kept.Language == ContentLanguage && DateTimeOffset.Now - kept.FetchedAt < GuidesTtl;
+        bool fresh = kept is not null && kept.Format == GuideTips.CurrentFormat && kept.Language == ContentLanguage &&
+                     DateTimeOffset.Now - kept.FetchedAt < GuidesTtl;
         bool failed = _guidesFailed.TryGetValue(game.AppId, out var at) && DateTimeOffset.Now - at < TimeSpan.FromDays(1);
         if (fresh || failed || !HasApiKey || game.Achievements.Count == 0) return kept;
         try
@@ -267,7 +268,10 @@ public sealed class GameService
             var theirs = (english ? own : names) is { } list
                 ? await _guides.TipsAsync(key, game.AppId, game.Name, "english", list, ct)
                 : new Dictionary<string, GuideTip>();
-            var tips = new GuideTips { Language = ContentLanguage, FetchedAt = DateTimeOffset.Now, Tips = GuideTips.Combine(mine, theirs) };
+            var tips = new GuideTips
+            {
+                Format = GuideTips.CurrentFormat, Language = ContentLanguage, FetchedAt = DateTimeOffset.Now, Tips = GuideTips.Combine(mine, theirs),
+            };
             _store.SaveGuides(game.AppId, tips);
             return tips;
         }

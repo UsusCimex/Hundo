@@ -82,10 +82,14 @@ internal static class ImageCache
     private static readonly Dictionary<string, BitmapSource> Memory = new();
     private static readonly Dictionary<string, Task<byte[]?>> Downloads = new();
     private static readonly Dictionary<string, DateTime> Failed = new();
+    private static readonly Dictionary<string, (int Width, int Height)> Sizes = new();
 
     public static string Dir { get; } = Path.Combine(AppPaths.DataRoot, "cache", "images");
 
     public static BitmapSource? TryGet(string url, int width) => Memory.GetValueOrDefault(Key(url, width));
+
+    /// <summary>The size of the file's picture in pixels, known once it has been loaded at any width.</summary>
+    public static (int Width, int Height)? SizeOf(string url) => Sizes.TryGetValue(url, out var size) ? size : null;
 
     public static async Task<BitmapSource?> GetAsync(string url, int width)
     {
@@ -105,7 +109,8 @@ internal static class ImageCache
             if (Downloads.TryGetValue(url, out var current) && current == download) Downloads.Remove(url);
         }
 
-        var image = bytes is null ? null : await Task.Run(() => Decode(bytes, width, url));
+        var decoded = bytes is null ? default : await Task.Run(() => Decode(bytes, width, url));
+        var image = decoded.Image;
         if (image is null)
         {
             Failed[url] = DateTime.UtcNow;
@@ -115,6 +120,7 @@ internal static class ImageCache
         }
         if (Memory.Count >= MemoryLimit) Memory.Clear();
         Memory[key] = image;
+        Sizes[url] = decoded.Size;
         return image;
     }
 
@@ -179,10 +185,13 @@ internal static class ImageCache
         }
     }
 
-    private static BitmapSource? Decode(byte[] bytes, int width, string url)
+    private static (BitmapSource? Image, (int Width, int Height) Size) Decode(byte[] bytes, int width, string url)
     {
         try
         {
+            // The header alone gives the size: a picture decoded smaller no longer tells it.
+            var frame = BitmapDecoder.Create(new MemoryStream(bytes), BitmapCreateOptions.DelayCreation | BitmapCreateOptions.IgnoreColorProfile,
+                BitmapCacheOption.None).Frames[0];
             var image = new BitmapImage();
             image.BeginInit();
             image.StreamSource = new MemoryStream(bytes);
@@ -192,13 +201,13 @@ internal static class ImageCache
             image.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
             image.EndInit();
             image.Freeze();
-            return image;
+            return (image, (frame.PixelWidth, frame.PixelHeight));
         }
         catch (Exception e)
         {
             // a broken or unknown-format image must not crash the UI - just do without it
             AppLog.Error("Image " + url, e);
-            return null;
+            return default;
         }
     }
 

@@ -113,15 +113,47 @@
             </Style.Triggers>
         </Style>
 
+        <Style x:Key="SpoilerPictures" TargetType="ItemsControl">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsTipHidden}" Value="True">
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <BlurEffect Radius="12" />
+                        </Setter.Value>
+                    </Setter>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="PictureThumb" TargetType="Button">
+            <Setter Property="Margin" Value="0,6,6,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Frame" CornerRadius="5" BorderThickness="1" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="RevealButton" TargetType="Button">
             <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="ToolTip" Value="{local:Tr card.revealTip}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border Background="Transparent">
-                            <Border x:Name="Pill" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="10" Padding="8,2" BorderThickness="1"
+                            <Border x:Name="Pill" HorizontalAlignment="Left" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" CornerRadius="10" Padding="8,2" BorderThickness="1"
                                     Background="{DynamicResource ControlFillColorDefaultBrush}"
                                     BorderBrush="{DynamicResource ControlStrokeColorSecondaryBrush}">
                                 <StackPanel Orientation="Horizontal">
@@ -752,9 +784,32 @@
 
                                             <TextBlock Text="{local:Tr details.guides}" Style="{StaticResource Header}" Margin="0,16,0,6" />
                                             <StackPanel Margin="0,0,0,8" Visibility="{Binding HasGuideTip, Converter={StaticResource BoolToVis}}">
-                                                <Grid Margin="0,0,0,4" Visibility="{Binding GuideText, Converter={StaticResource EmptyToCollapsed}}">
-                                                    <TextBlock Text="{Binding GuideText}" Style="{StaticResource SpoilerTip}" />
-                                                    <Button Style="{StaticResource RevealButton}" Command="{Binding RevealCommand}" VerticalAlignment="Top"
+                                                <Grid Margin="0,0,0,4">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding GuideText}" Style="{StaticResource SpoilerTip}"
+                                                                   Visibility="{Binding GuideText, Converter={StaticResource EmptyToCollapsed}}" />
+                                                        <ItemsControl ItemsSource="{Binding GuidePictures}" Style="{StaticResource SpoilerPictures}" Focusable="False">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <WrapPanel />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Button Style="{StaticResource PictureThumb}" Click="OnOpenPicture" ToolTip="{local:Tr details.pictureTip}" AutomationProperties.AutomationId="GuidePicture"
+                                                                            Visibility="{Binding IsShown, Converter={StaticResource BoolToVis}}">
+                                                                        <Border Width="142" Height="80" CornerRadius="4">
+                                                                            <Border.Background>
+                                                                                <ImageBrush ImageSource="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                                                            </Border.Background>
+                                                                        </Border>
+                                                                    </Button>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </StackPanel>
+                                                    <!-- Over the pictures too: a hidden one's pictures are spoilers as well. -->
+                                                    <Button Style="{StaticResource RevealButton}" Command="{Binding RevealCommand}" VerticalContentAlignment="Top"
                                                             Visibility="{Binding IsTipHidden, Converter={StaticResource BoolToVis}}" />
                                                 </Grid>
                                                 <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,4"

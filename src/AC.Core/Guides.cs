@@ -6,12 +6,23 @@ using System.Text.RegularExpressions;
 namespace AC.Core;
 
 /// <summary>A guide in a Steam Community list.</summary>
-public sealed record GuideCard(ulong Id, string Title, ulong Creator);
+public sealed record GuideCard(ulong Id, string Title, ulong Creator)
+{
+    /// <summary>The pictures uploaded to the guide: its text refers to them by id.</summary>
+    public IReadOnlyList<GuidePicture> Pictures { get; init; } = [];
+}
+
+/// <summary>A picture uploaded to a guide.</summary>
+public sealed record GuidePicture(string Id, string Url, long Bytes);
 
 /// <summary>A line of a guide section and how it looks: headings, bold and underlined lines start entries.</summary>
 /// <param name="Media">Pictures and videos on the line.</param>
 /// <param name="Item">The list item the line is in, numbered through the section; 0 - not in a list.</param>
-public sealed record GuideLine(string Text, int Heading, double Bold, double Underlined, int Media, int Item);
+public sealed record GuideLine(string Text, int Heading, double Bold, double Underlined, int Media, int Item)
+{
+    /// <summary>Addresses of the pictures on the line worth showing: not icons.</summary>
+    public IReadOnlyList<string> Pictures { get; init; } = [];
+}
 
 public sealed record GuideSection(string Id, string Title, IReadOnlyList<GuideLine> Lines);
 
@@ -27,6 +38,9 @@ public sealed record GuideAchievement(string ApiName, string Name, string Descri
 /// <param name="Text">The guide's own words beyond the name and description; empty when it only shows pictures or a video.</param>
 public sealed record GuideTip(ulong GuideId, string GuideTitle, string Author, string Language, string SectionId, int Rank, string Text)
 {
+    /// <summary>Pictures of the quoted part.</summary>
+    public IReadOnlyList<string> Pictures { get; init; } = [];
+
     [JsonIgnore]
     public string Url => "https://steamcommunity.com/sharedfiles/filedetails/?id=" + GuideId.ToString(CultureInfo.InvariantCulture) +
                          (SectionId.Length > 0 ? "#" + SectionId : "");
@@ -41,6 +55,10 @@ public sealed record GuideTip(ulong GuideId, string GuideTitle, string Author, s
 /// <summary>Tips for a game's achievements from Steam Community guides, kept on disk.</summary>
 public sealed class GuideTips
 {
+    /// <summary>Tips kept in an older format are read again: before it, tips quoted picture tags as text.</summary>
+    public const int CurrentFormat = 2;
+
+    public int Format { get; set; }
     /// <summary>The content language the guides were picked for.</summary>
     public string Language { get; set; } = "";
     public DateTimeOffset FetchedAt { get; set; }
@@ -64,7 +82,14 @@ public static partial class GuideParser
     private static readonly HashSet<string> BlockTags = new(StringComparer.Ordinal)
         { "*", "list", "olist", "quote", "code", "table", "tr", "hr", "h1", "h2", "h3" };
 
-    private const string PictureEnd = "[/previewimg]";
+    /// <summary>Smaller uploads are icons beside the text (items, achievements), not pictures to look at.</summary>
+    public const long MinPictureBytes = 8 * 1024;
+
+    /// <summary>
+    /// A picture worth showing by its size in pixels: guides put the achievement's icon, even enlarged, and a shot of
+    /// its pop-up beside its name, and those tell nothing the app does not show.
+    /// </summary>
+    public static bool WorthShowing(int width, int height) => Math.Min(width, height) >= 150 && Math.Max(width, height) >= 300;
 
     /// <summary>
     /// The guides to read first, by their titles, the list's order breaking ties. The list holds guides tagged
@@ -88,10 +113,14 @@ public static partial class GuideParser
     }
 
     /// <summary>The visual lines of a section's BBCode: a line ends at a line break, a list item, a heading or a block.</summary>
-    public static List<GuideLine> Lines(string bbcode)
+    /// <param name="uploads">The guide's own pictures, for the tags that refer to them by id.</param>
+    public static List<GuideLine> Lines(string bbcode, IReadOnlyList<GuidePicture>? uploads = null)
     {
+        var uploaded = (uploads ?? []).Where(p => p.Bytes >= MinPictureBytes)
+            .GroupBy(p => p.Id).ToDictionary(g => g.Key, g => g.First().Url, StringComparer.Ordinal);
         var lines = new List<GuideLine>();
         List<(string Text, bool Bold, bool Under)>? segments = null;
+        var pictures = new List<string>();
         int media = 0, lineHeading = 0, lineItem = 0, bold = 0, under = 0, heading = 0, item = 0, items = 0;
         var outer = new Stack<int>();
 
@@ -104,10 +133,13 @@ public static partial class GuideParser
                 int total = segments.Sum(s => s.Text.Trim().Length);
                 double Share(Func<(string Text, bool Bold, bool Under), bool> f) =>
                     total == 0 ? 0 : (double)segments.Where(f).Sum(s => s.Text.Trim().Length) / total;
-                lines.Add(new GuideLine(text, lineHeading, Share(s => s.Bold), Share(s => s.Under), media, lineItem));
+                pictures.AddRange(Link().Matches(text).Select(l => l.Value.TrimEnd('.', ',', ';', ':', '!', '?', ')')).Where(LinksPicture));
+                lines.Add(new GuideLine(text, lineHeading, Share(s => s.Bold), Share(s => s.Under), media, lineItem)
+                    { Pictures = pictures.Distinct().ToList() });
             }
             segments = null;
             media = 0;
+            pictures.Clear();
         }
 
         void Start()
@@ -131,6 +163,15 @@ public static partial class GuideParser
         }
 
         int i = 0;
+
+        // A picture's own text is a caption, mostly a leftover ("Image"); authors leave the tag unclosed too,
+        // then the text after it is the guide's.
+        void SkipCaption(string end)
+        {
+            int next = bbcode.IndexOf('[', i);
+            if (next >= 0 && string.Compare(bbcode, next, end, 0, end.Length, StringComparison.OrdinalIgnoreCase) == 0) i = next + end.Length;
+        }
+
         while (i < bbcode.Length)
         {
             int open = bbcode.IndexOf('[', i);
@@ -146,6 +187,8 @@ public static partial class GuideParser
                 continue;
             }
             bool close = m.Groups[1].Length > 0;
+            // [previewimg=id;size;file.png], [screenshot=id;size;https://...], [url=https://...]
+            var fields = m.Groups[3].Value.Split(';');
             i = open + m.Length;
             if (BlockTags.Contains(name)) Break();
             switch (name)
@@ -173,16 +216,25 @@ public static partial class GuideParser
                     Start();
                     media++;
                     int end = bbcode.IndexOf("[/img]", i, StringComparison.OrdinalIgnoreCase);
+                    if (end >= 0 && Shows(bbcode[i..end].Trim())) pictures.Add(bbcode[i..end].Trim());
                     i = end < 0 ? bbcode.Length : end + "[/img]".Length;
                     break;
+                case "screenshot" when !close:
+                    Start();
+                    media++;
+                    if (fields.Length >= 3 && Shows(fields[2].Trim())) pictures.Add(fields[2].Trim());
+                    SkipCaption("[/screenshot]");
+                    break;
+                case "url" when !close && LinksPicture(fields[0].Trim()):
+                    pictures.Add(fields[0].Trim());
+                    break;
+                // An icon's text is a label beside it.
                 case var preview when !close && preview.StartsWith("preview", StringComparison.Ordinal):
                     Start();
                     media++;
-                    // A picture's own text is a caption, mostly a leftover ("Image"); an icon's is a label beside it.
-                    // Authors leave the tag unclosed too: then the text after it is the guide's.
-                    int next = bbcode.IndexOf('[', i);
-                    if (name == "previewimg" && next >= 0 && string.Compare(bbcode, next, PictureEnd, 0, PictureEnd.Length, StringComparison.OrdinalIgnoreCase) == 0)
-                        i = next + PictureEnd.Length;
+                    if (name != "previewimg") break;
+                    if (uploaded.TryGetValue(fields[0].Trim(), out var upload)) pictures.Add(upload);
+                    SkipCaption("[/previewimg]");
                     break;
                 case "noparse" when !close:
                     int stop = bbcode.IndexOf("[/noparse]", i, StringComparison.OrdinalIgnoreCase);
@@ -207,10 +259,29 @@ public static partial class GuideParser
     private static readonly HashSet<string> Known = new(StringComparer.Ordinal)
     {
         "b", "i", "u", "s", "strike", "spoiler", "noparse", "hr", "url", "list", "olist", "*", "quote", "code",
-        "table", "tr", "th", "td", "img", "h1", "h2", "h3",
+        "table", "tr", "th", "td", "img", "screenshot", "h1", "h2", "h3",
     };
 
-    [GeneratedRegex(@"\G\[(/?)(\*|[A-Za-z0-9]+)(?:=[^\]\r\n]*)?\]")]
+    /// <summary>A picture to show: a web address, but not of Steam's achievement and game icons.</summary>
+    private static bool Shows(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" &&
+        !uri.AbsolutePath.Contains("/public/images/apps/", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A link that leads to a picture rather than a page: by the file type or the host.</summary>
+    private static bool LinksPicture(string url) =>
+        Shows(url) && Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+        (PictureFile().IsMatch(uri.AbsolutePath) || PictureHosts.Contains(uri.Host));
+
+    private static readonly HashSet<string> PictureHosts = new(StringComparer.OrdinalIgnoreCase)
+        { "steamuserimages-a.akamaihd.net", "images.steamusercontent.com", "i.imgur.com" };
+
+    [GeneratedRegex(@"\.(?:png|jpe?g|gif|webp)$", RegexOptions.IgnoreCase)]
+    private static partial Regex PictureFile();
+
+    [GeneratedRegex(@"https?://\S+")]
+    private static partial Regex Link();
+
+    [GeneratedRegex(@"\G\[(/?)(\*|[A-Za-z0-9]+)(?:=([^\]\r\n]*))?\]")]
     private static partial Regex Tag();
 
     [GeneratedRegex(@"achiev|troph|достижен|ачивк")]
@@ -274,10 +345,12 @@ public static partial class GuideMatcher
             int kind = places.Min(p => Kind(p.Rank));
             var best = places
                 .Where(p => Kind(p.Rank) == kind)
-                .Select(p => (p.Rank, p.Section, Text: Quote(sections[p.Section], folded[p.Section], p.Line, a, k, stops, descriptions, mentions)))
+                .Select(p => (p.Rank, p.Section, Lines: Quote(sections[p.Section], folded[p.Section], p.Line, a, k, stops, descriptions, mentions)))
+                .Select(x => (x.Rank, x.Section, x.Lines, Text: Words(x.Lines, a)))
                 .OrderByDescending(x => x.Text.Length).ThenBy(x => x.Rank)
                 .First();
-            tips[a.ApiName] = new GuideTip(page.Id, page.Title, page.Author, language, sections[best.Section].Id, best.Rank, best.Text);
+            tips[a.ApiName] = new GuideTip(page.Id, page.Title, page.Author, language, sections[best.Section].Id, best.Rank, best.Text)
+                { Pictures = PicturesOf(best.Lines) };
         }
 
         foreach (var subject in TitleSubjects(page.Title, names, Norm(game)))
@@ -287,9 +360,11 @@ public static partial class GuideMatcher
             // From where the guide first names it: before that come the foreword and other achievements.
             var all = sections.SelectMany(s => s.Lines).ToList();
             int from = all.FindIndex(l => (" " + Norm(l.Text) + " ").Contains(" " + names[subject] + " ", StringComparison.Ordinal));
-            var whole = Words(all.Skip(Math.Max(0, from)), a);
+            var rest = all.Skip(Math.Max(0, from)).ToList();
+            var whole = Words(rest, a);
             // A guide of only pictures is still the place to look.
-            if (whole.Length > 0 || known is null) tips[a.ApiName] = new GuideTip(page.Id, page.Title, page.Author, language, "", TitleRank, whole);
+            if (whole.Length > 0 || known is null)
+                tips[a.ApiName] = new GuideTip(page.Id, page.Title, page.Author, language, "", TitleRank, whole) { Pictures = PicturesOf(rest) };
         }
         return tips;
     }
@@ -371,11 +446,16 @@ public static partial class GuideMatcher
         return null;
     }
 
+    /// <summary>The first pictures of the quoted lines: a walkthrough of pictures shows only its start.</summary>
+    private static List<string> PicturesOf(IEnumerable<GuideLine> lines) => lines.SelectMany(l => l.Pictures).Distinct().Take(MaxPictures).ToList();
+
+    private const int MaxPictures = 8;
+
     /// <summary>
-    /// The guide's words from the place on, or in a walkthrough the steps leading up to it, without lines that only
-    /// repeat the name or the description.
+    /// The lines from the place on, or in a walkthrough the steps leading up to it: the quote is their words without
+    /// lines that only repeat the name or the description (<see cref="Words"/>).
     /// </summary>
-    private static string Quote(GuideSection section, List<string> folded, int line, GuideAchievement a, int self,
+    private static List<GuideLine> Quote(GuideSection section, List<string> folded, int line, GuideAchievement a, int self,
         List<List<Regex>> stops, List<string> descriptions, List<List<string>> mentions)
     {
         var lines = section.Lines;
@@ -417,7 +497,7 @@ public static partial class GuideMatcher
             }
         }
 
-        return Words(block, a);
+        return block;
     }
 
     /// <summary>The line before the place, past pictures, when it leads up to the achievement; null - it does not.</summary>

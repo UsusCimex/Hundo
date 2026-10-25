@@ -24,7 +24,7 @@ public sealed class SteamGuides(SteamWebApi api)
         {
             if (achievements.All(a => tips.TryGetValue(a.ApiName, out var t) && t.Text.Length > 0)) break;
             var sections = (await api.GetGuideSectionsAsync(key, card.Id, ct))
-                .Select(s => new GuideSection(s.Id, s.Title, GuideParser.Lines(s.Text)))
+                .Select(s => new GuideSection(s.Id, s.Title, GuideParser.Lines(s.Text, card.Pictures)))
                 .ToList();
             var page = new GuidePage(card.Id, card.Title, authors.GetValueOrDefault(card.Creator, ""), sections);
             foreach (var (apiName, tip) in GuideMatcher.Match(page, language, achievements, gameName))

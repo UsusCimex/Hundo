@@ -193,20 +193,29 @@ public sealed class SteamWebApi(HttpClient http)
         return result;
     }
 
-    /// <summary>A game's guides with all the given tags, the best rated first.</summary>
+    /// <summary>A game's guides with all the given tags, the best rated first, with the pictures uploaded to them.</summary>
     public async Task<List<GuideCard>> QueryGuidesAsync(string key, uint appId, IReadOnlyList<string> tags, int count, CancellationToken ct = default)
     {
         var tagArgs = string.Concat(tags.Select((t, i) => $"&requiredtags%5B{i}%5D={Esc(t)}"));
         // query_type 0 - by votes; filetype 10 - guides; without return_details only ids come back.
         using var doc = await GetJsonAsync(
-            $"{Base}/IPublishedFileService/QueryFiles/v1/?key={Esc(key)}&query_type=0&filetype=10&appid={appId}&numperpage={count}{tagArgs}&return_details=true&format=json", ct);
+            $"{Base}/IPublishedFileService/QueryFiles/v1/?key={Esc(key)}&query_type=0&filetype=10&appid={appId}&numperpage={count}{tagArgs}&return_details=true&return_previews=true&format=json", ct);
         var list = new List<GuideCard>();
         if (!doc.RootElement.TryGetProperty("response", out var resp) || !resp.TryGetProperty("publishedfiledetails", out var files)) return list;
         foreach (var f in files.EnumerateArray())
             if (Id(f, "publishedfileid") is { } id && Str(f, "title") is { Length: > 0 } title)
-                list.Add(new GuideCard(id, title.Trim(), Id(f, "creator") ?? 0));
+                list.Add(new GuideCard(id, title.Trim(), Id(f, "creator") ?? 0) { Pictures = Pictures(f) });
         return list;
     }
+
+    /// <summary>Previews of type 0 are pictures; the others are videos and sketchfab models.</summary>
+    private static List<GuidePicture> Pictures(JsonElement file) =>
+        file.TryGetProperty("previews", out var previews) && previews.ValueKind == JsonValueKind.Array
+            ? previews.EnumerateArray()
+                .Where(p => Num(p, "preview_type") == 0 && Id(p, "previewid") is not null && Str(p, "url").Length > 0)
+                .Select(p => new GuidePicture(Id(p, "previewid")!.Value.ToString(CultureInfo.InvariantCulture), Str(p, "url"), (long)Num(p, "size")))
+                .ToList()
+            : [];
 
     /// <summary>The sections of a guide in their order: id, title and BBCode text.</summary>
     public async Task<List<(string Id, string Title, string Text)>> GetGuideSectionsAsync(string key, ulong guideId, CancellationToken ct = default)
