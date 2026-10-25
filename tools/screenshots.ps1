@@ -41,7 +41,10 @@ public static class Shot {
     [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr h, IntPtr dc);
     [DllImport("gdi32.dll")] static extern bool BitBlt(IntPtr d, int x, int y, int w, int h, IntPtr s, int sx, int sy, uint rop);
     public static RECT Bounds(IntPtr h) { RECT v; DwmGetWindowAttribute(h, 9, out v, Marshal.SizeOf(typeof(RECT))); return v; }
-    public static void TopMost(IntPtr h) { SetWindowPos(h, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); }
+    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
+    // A window started from a hidden console, or minimized meanwhile, is restored without taking the focus.
+    public static void TopMost(IntPtr h) { if (IsIconic(h)) ShowWindow(h, 4); SetWindowPos(h, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); }
     public static void Move(IntPtr h, int x, int y) { SetWindowPos(h, new IntPtr(-1), x, y, 0, 0, 0x0001 | 0x0010); }
     public static void Grab(IntPtr h, string path) { GrabRect(Bounds(h), path); }
     // From the screen, not PrintWindow: that one misses images loaded after the first paint.
