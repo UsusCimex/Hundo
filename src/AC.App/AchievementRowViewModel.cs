@@ -134,7 +134,10 @@ public sealed class AchievementRowViewModel : ObservableObject
                 AC.Core.TimeEstimator.SourceName => Loc.T("estimate.model"),
                 _ => Loc.T("estimate.none"),
             };
-            return _row.EstimateMinutes is null ? source : source + "\n" + EstimateBoth;
+            if (_row.EstimateMinutes is null) return source;
+            var hint = source + "\n" + EstimateBoth;
+            return Left is not { Late: true } c ? hint
+                : hint + "\n" + Loc.T(c.Minutes.HasValue ? "estimate.lateTip" : IsMissable ? "estimate.missedTip" : "estimate.overdueTip");
         }
     }
 
@@ -145,9 +148,20 @@ public sealed class AchievementRowViewModel : ObservableObject
         {
             if (_row.EstimateMinutes is null) return "-";
             var fromStart = Loc.T("estimate.fromStart", TimeEstimator.Format(_row.EstimateMinutes));
-            return _owner.TimeLeftOf(ApiName) is { } left ? fromStart + ", " + Loc.T("estimate.left", TimeEstimator.Format(left)) : fromStart;
+            return Left is { } c ? fromStart + ", " + LeftText(c) : fromStart;
         }
     }
+
+    private Countdown? Left => _row.IsDone ? null : _owner.CountdownOf(ApiName);
+
+    private bool IsMissable => _row.Kind == AchievementKind.Missable;
+
+    /// <summary>Past the estimate a missable one may have been missed; others just take longer.</summary>
+    private string LeftText(Countdown c) => c.Minutes is { } m ? Loc.T("estimate.left", TimeEstimator.Format(m))
+        : Loc.T(IsMissable ? "card.missedShort" : "estimate.overdue");
+
+    /// <summary>The hours show the time left and it is past the estimate: counted with the wide margin, or past it too.</summary>
+    public bool IsLate => _owner.ShowTimeLeft && Left?.Late == true;
 
     public string Description =>
         _row.Def.Description.Length > 0 ? _row.Def.Description :
@@ -182,7 +196,7 @@ public sealed class AchievementRowViewModel : ObservableObject
             var own = _row.EstimateIsManual ? " *" : "";
             if (!_owner.ShowTimeLeft) return TimeEstimator.Format(_row.EstimateMinutes) + own;
             if (_row.IsDone) return "";
-            return _owner.TimeLeftOf(ApiName) is { } left ? Loc.T("estimate.left", TimeEstimator.Format(left)) + own : "-";
+            return Left is { } c ? LeftText(c) + (c.Minutes.HasValue ? own : "") : "-";
         }
     }
 
@@ -190,6 +204,17 @@ public sealed class AchievementRowViewModel : ObservableObject
 
     /// <summary>The overlay pill: the estimate, or a warning for a missable one that was probably missed.</summary>
     public string OverlayBadge => _row.ProbablyMissed ? Loc.T("card.missedShort") : Estimate;
+
+    public bool OverlayBadgeWarns => _row.ProbablyMissed || IsLate;
+
+    /// <summary>The time left moved on: the play since the last unlock grew.</summary>
+    public void RefreshTime()
+    {
+        OnPropertyChanged(nameof(Estimate));
+        OnPropertyChanged(nameof(EstimateBoth));
+        OnPropertyChanged(nameof(EstimateHint));
+        OnPropertyChanged(nameof(IsLate));
+    }
 
     public string StatusText => _row.Status switch
     {
@@ -278,7 +303,7 @@ public sealed class AchievementRowViewModel : ObservableObject
         nameof(Estimate), nameof(StatusText), nameof(ManualDone), nameof(OverlayDescription),
         nameof(CanWriteToSteam), nameof(IsSpoilerHidden), nameof(IsTipHidden), nameof(IsHidden), nameof(IsLocked), nameof(IsManualStatus),
         nameof(GroupIsAuto), nameof(IsPendingWrite), nameof(RarityText), nameof(RarityLevel), nameof(EstimateHint),
-        nameof(EstimateBoth),
+        nameof(EstimateBoth), nameof(IsLate),
     };
 
     /// <summary>Swaps the row data after a recalculation without recreating the object (keeps focus).</summary>

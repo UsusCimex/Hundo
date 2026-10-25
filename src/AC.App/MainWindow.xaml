@@ -81,6 +81,24 @@
             </Style.Triggers>
         </Style>
 
+        <!-- Past the estimate: the time left has the wide margin, or there is none. -->
+        <Style x:Key="LateCaption" TargetType="TextBlock" BasedOn="{StaticResource Caption}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsLate}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="LateText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsLate}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="SpoilerTip" TargetType="TextBlock">
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
@@ -228,7 +246,7 @@
                                     Visibility="{Binding Estimate, Converter={StaticResource EmptyToCollapsed}}">
                             <TextBlock Text="&#xE823;" Style="{StaticResource Glyph}" FontSize="12" Margin="0,0,4,0"
                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                            <TextBlock Text="{Binding Estimate}" Style="{StaticResource Caption}" />
+                            <TextBlock Text="{Binding Estimate}" Style="{StaticResource LateCaption}" />
                         </StackPanel>
                     </StackPanel>
 
@@ -283,7 +301,7 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="40" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="72" />
+                    <ColumnDefinition Width="120" />
                     <ColumnDefinition Width="64" />
                 </Grid.ColumnDefinitions>
                 <CheckBox MinWidth="0" VerticalAlignment="Center" Margin="0,0,4,0"
@@ -306,7 +324,7 @@
                     </Grid>
                 </StackPanel>
                 <TextBlock Grid.Column="3" Text="{Binding Estimate}" HorizontalAlignment="Right" VerticalAlignment="Center"
-                           ToolTip="{Binding EstimateHint}" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                           ToolTip="{Binding EstimateHint}" Style="{StaticResource LateText}" />
                 <TextBlock Grid.Column="4" Text="{Binding Percent}" HorizontalAlignment="Right" VerticalAlignment="Center"
                            Style="{StaticResource RarityPercent}" />
             </Grid>

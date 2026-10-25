@@ -181,7 +181,7 @@ public sealed class GameService
         {
             try
             {
-                await RefreshPlaytimeAsync(game, ct);
+                await RefreshPlaytimeAsync(game, ct: ct);
             }
             catch (Exception e) when (e is SteamApiException or HttpRequestException or TaskCanceledException)
             {
@@ -225,8 +225,9 @@ public sealed class GameService
     /// <summary>
     /// Fresh Steam playtime of the game. Between sessions it also goes to the playtime history, together with the
     /// playtime two weeks back (from Steam's "last two weeks"): the pace then skips stretches without progress.
+    /// A session the app saw from its start adds its start too: the play since the last unlock is then known exactly.
     /// </summary>
-    public async Task RefreshPlaytimeAsync(GameData game, CancellationToken ct = default)
+    public async Task RefreshPlaytimeAsync(GameData game, PlaySession? session = null, CancellationToken ct = default)
     {
         RequireKey();
         var own = await _api.GetOwnedGameAsync(ApiKey, Settings.SteamId64, game.AppId, ct);
@@ -237,6 +238,7 @@ public sealed class GameService
         {
             var now = DateTimeOffset.Now;
             Progress.AddPlaytime(game, now.AddDays(-14), own.PlaytimeMinutes - own.Playtime2WeeksMinutes);
+            if (session is not null && session.AppId == game.AppId) Progress.AddSessionStart(game, session, own.PlaytimeMinutes);
             Progress.AddPlaytime(game, now, own.PlaytimeMinutes);
         }
         _store.SaveGame(game);

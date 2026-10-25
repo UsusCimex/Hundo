@@ -31,7 +31,40 @@ public sealed record Plan(
 
     /// <summary>Time left to each locked achievement with an estimate (<see cref="Planner.TimeLeft"/>).</summary>
     public IReadOnlyDictionary<string, double> TimeLeft { get; init; } = new Dictionary<string, double>();
+
+    /// <summary>The same with the wide margin (P90): the time a player who takes longer gets.</summary>
+    public IReadOnlyDictionary<string, double> WideTimeLeft { get; init; } = new Dictionary<string, double>();
+
+    /// <summary>
+    /// Time left to each locked achievement after <paramref name="played"/> minutes of play since the last unlock.
+    /// Past the estimate the player takes longer than it assumes, and the wide margin gives more time; past that too,
+    /// there is no estimate.
+    /// </summary>
+    public Dictionary<string, Countdown> CountDown(double played)
+    {
+        var result = new Dictionary<string, Countdown>(StringComparer.Ordinal);
+        foreach (var (name, left) in TimeLeft)
+        {
+            double wide = Math.Max(left + Planner.MinMarginMinutes, WideTimeLeft.GetValueOrDefault(name, left));
+            result[name] = played < left ? new Countdown(left - played, false)
+                : new Countdown(played < wide ? wide - played : null, true);
+        }
+        return result;
+    }
+
+    /// <summary>The time to 100% after that play: the longest countdown; null - nothing to count.</summary>
+    public Countdown? RemainingAfter(double played)
+    {
+        if (TimeLeft.Count == 0) return null;
+        var known = CountDown(played).Values.Where(c => c.Minutes.HasValue).ToList();
+        return known.Count == 0 ? new Countdown(null, true) : known.MaxBy(c => c.Minutes!.Value);
+    }
 }
+
+/// <summary>Time left to an achievement at the moment.</summary>
+/// <param name="Minutes">null - longer than even the wide margin.</param>
+/// <param name="Late">Past the estimate: the time left is counted with the wide margin.</param>
+public readonly record struct Countdown(double? Minutes, bool Late);
 
 /// <summary>
 /// Order planner.
@@ -45,6 +78,12 @@ public static class Planner
     /// Beyond that it is more likely AFK or hours before achievements existed (fixed on the "Time" tab).
     /// </summary>
     public const double MaxPace = 3;
+
+    /// <summary>
+    /// The wide margin past an estimate is at least this long: the rarity model puts the most common achievement at
+    /// the very start, and neither the estimates nor Steam's minutes are finer.
+    /// </summary>
+    public const double MinMarginMinutes = 15;
 
     public static Plan Build(GameData game, Percentile p, DateTimeOffset? now = null)
     {
@@ -75,7 +114,8 @@ public static class Planner
         double pace = PaceOf(game, now ?? DateTimeOffset.Now);
         int unknown = open.Count(r => r.EstimateMinutes is null);
         var left = TimeLeft(rows, p, pace);
-        return new Plan(sections, left.Count == 0 ? null : left.Values.Max(), unknown, pace) { TimeLeft = left };
+        var wide = p == Percentile.P90 ? left : TimeLeft(GameLogic.BuildRows(game, Percentile.P90), Percentile.P90, pace);
+        return new Plan(sections, left.Count == 0 ? null : left.Values.Max(), unknown, pace) { TimeLeft = left, WideTimeLeft = wide };
     }
 
     /// <summary>

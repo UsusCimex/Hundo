@@ -82,7 +82,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         uint runningAtStart = 0;
         try { runningAtStart = SteamLocal.RunningAppId(); }
         catch { }
-        _sessions = new SessionTracker(runningAtStart);
+        _sessions = new SessionTracker(runningAtStart, DateTimeOffset.Now);
 
         _runningTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         _runningTimer.Tick += async (_, _) => await OnRunningTickAsync();
@@ -212,13 +212,23 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public bool ShowTimeLeft => _selectedHours.Value == HoursMode.Left;
 
-    private IReadOnlyDictionary<string, double> _timeLeft = new Dictionary<string, double>();
+    private Plan? _plan;
+    private IReadOnlyList<AchievementRow> _rows = [];
+    /// <summary>Minutes played since the last unlock when the time left was last counted.</summary>
+    private double _played;
+    private IReadOnlyDictionary<string, Countdown> _countdown = new Dictionary<string, Countdown>();
 
-    /// <summary>Time left to a locked achievement; null - done or no estimate.</summary>
-    internal double? TimeLeftOf(string apiName) => _timeLeft.TryGetValue(apiName, out var v) ? v : null;
+    /// <summary>Time left to a locked achievement now; null - done or no estimate.</summary>
+    internal Countdown? CountdownOf(string apiName) => _countdown.TryGetValue(apiName, out var c) ? c : null;
 
-    /// <summary>The hours the overlay and the plan groups go by.</summary>
-    private double? HoursOf(AchievementRow r) => ShowTimeLeft ? TimeLeftOf(r.ApiName) : r.EstimateMinutes;
+    /// <summary>The hours the overlay and the plan groups go by; null - none, or longer than the wide margin.</summary>
+    private double? HoursOf(AchievementRow r) => ShowTimeLeft ? CountdownOf(r.ApiName)?.Minutes : r.EstimateMinutes;
+
+    private double PlayedSinceUnlock(GameData game)
+    {
+        var now = DateTimeOffset.Now;
+        return Progress.MinutesSinceProgress(game, now, _sessions.Played(game.AppId, now));
+    }
 
     public bool HideSpoilers => _svc.Settings.HideSpoilers;
     public bool HasApiKey => _svc.HasApiKey;
@@ -967,7 +977,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // The time to 100% derived from own progress changes with every unlock, so recalculate it.
         TimeEstimator.EstimateFromGlobalPercent(_game);
         var plan = Planner.Build(_game, p);
-        _timeLeft = plan.TimeLeft;
+        _plan = plan;
+        _played = PlayedSinceUnlock(_game);
+        _countdown = plan.CountDown(_played);
 
         if (rebuildRows)
         {
@@ -978,7 +990,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 Search = Search,
                 Sort = _selectedSort.Value,
                 Descending = Descending,
-                TimeLeft = ShowTimeLeft ? _timeLeft : null,
+                TimeLeft = ShowTimeLeft
+                    ? _countdown.Where(kv => kv.Value.Minutes.HasValue).ToDictionary(kv => kv.Key, kv => kv.Value.Minutes!.Value)
+                    : null,
             };
             if (_kindFilter.Value is { } k) query.Kinds.Add(k);
             var selectedApi = SelectedRow?.ApiName;
@@ -988,6 +1002,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         var all = GameLogic.BuildRows(_game, p);
+        _rows = all;
         if (!rebuildRows)
         {
             var fresh = all.ToDictionary(r => r.ApiName, StringComparer.Ordinal);
@@ -999,19 +1014,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         CountOpen = CountAll - CountDone;
         CountNotCounted = all.Count(r => r.Status == EffectiveStatus.ManualDone);
 
-        PlanSections.Clear();
-        foreach (var s in plan.Sections)
-        {
-            var groups = s.Groups.Select(g =>
-            {
-                var longest = ShowTimeLeft ? g.Items.Max(HoursOf) : g.LongestMinutes;
-                return new PlanGroupViewModel(
-                    g.Label.Length > 0 ? g.Label : Loc.T("plan.noGroup"),
-                    longest is null ? "" : Loc.T("plan.upTo", TimeEstimator.Format(longest)),
-                    g.Items.Select(i => new AchievementRowViewModel(this, i)).ToList());
-            }).ToList();
-            PlanSections.Add(new PlanSectionViewModel($"{Options.StageTitle(s.Stage)} ({s.Count})", groups));
-        }
+        ShowPlan(plan);
 
         var (u, m, total) = GameLogic.Progress(_game);
         var steamPct = Number(total == 0 ? 0 : 100.0 * u / total);
@@ -1024,17 +1027,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         StatUnlocked = $"{u} / {total}";
         StatUnlockedSub = m > 0 ? Loc.T("game.unlockedSubManual", steamPct, m) : Loc.T("game.unlockedSub", steamPct);
 
-        RemainingText = plan.IsComplete ? Loc.T("plan.complete")
-            : plan.RemainingMinutes is { } rem
-                ? Loc.T("plan.remaining", TimeEstimator.Format(rem)) +
-                  (plan.Pace > 1.05 ? Loc.T("plan.pace", Number(plan.Pace, "0.#")) : "") +
-                  (plan.UnknownEstimateCount > 0 ? Loc.Plural("plan.unknown", plan.UnknownEstimateCount) : "")
-            : Loc.T(_game.Achievements.All(a => a.Percent is null) ? "plan.noPercents" : "plan.noEstimate");
-
-        StatRemaining = plan.IsComplete ? "100%" : plan.RemainingMinutes is { } rm ? "~" + TimeEstimator.Format(rm) : Loc.T("game.noEstimate");
-        StatRemainingSub = plan.IsComplete ? Loc.T("game.allDone")
-            : plan.RemainingMinutes is null ? Loc.T("game.setInTime")
-            : CompletionSourceTitle(_game);
+        ShowRemaining();
         var played = TimeEstimator.Format(_game.EffectivePlaytimeMinutes);
         var steamPlayed = TimeEstimator.Format(_game.PlaytimeMinutes);
         StatPlayed = played;
@@ -1066,7 +1059,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             d.Day.ToString(Loc.T("history.date"), language), $"+{d.Unlocked.Count}", string.Join(", ", d.Unlocked.Select(a => a.Name)))).ToList();
         UpdateOverlayLists(all);
 
-        var summary = GameSummary.Of(_game);
+        var summary = GameSummary.Of(_game, _played);
         _summaries[_game.AppId] = summary;
         if (Library.FirstOrDefault(i => i.AppId == _game.AppId) is { } item && !summary.Equals(item.Summary))
         {
@@ -1074,6 +1067,57 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (LibraryByTimeLeft || LibraryStartedOnly) LibraryView.Refresh();
         }
         UpdateSession();
+    }
+
+    private void ShowPlan(Plan plan)
+    {
+        PlanSections.Clear();
+        foreach (var s in plan.Sections)
+        {
+            var groups = s.Groups.Select(g =>
+            {
+                var longest = ShowTimeLeft ? g.Items.Max(HoursOf) : g.LongestMinutes;
+                return new PlanGroupViewModel(
+                    g.Label.Length > 0 ? g.Label : Loc.T("plan.noGroup"),
+                    longest is null ? "" : Loc.T("plan.upTo", TimeEstimator.Format(longest)),
+                    g.Items.Select(i => new AchievementRowViewModel(this, i)).ToList());
+            }).ToList();
+            PlanSections.Add(new PlanSectionViewModel($"{Options.StageTitle(s.Stage)} ({s.Count})", groups));
+        }
+    }
+
+    private void ShowRemaining()
+    {
+        if (_game is null || _plan is not { } plan) return;
+        var left = plan.RemainingAfter(_played);
+        RemainingText = plan.IsComplete ? Loc.T("plan.complete")
+            : left is { Minutes: { } rem }
+                ? Loc.T("plan.remaining", TimeEstimator.Format(rem)) +
+                  (plan.Pace > 1.05 ? Loc.T("plan.pace", Number(plan.Pace, "0.#")) : "") +
+                  (plan.UnknownEstimateCount > 0 ? Loc.Plural("plan.unknown", plan.UnknownEstimateCount) : "")
+            : left is not null ? Loc.T("plan.overdue")
+            : Loc.T(_game.Achievements.All(a => a.Percent is null) ? "plan.noPercents" : "plan.noEstimate");
+
+        StatRemaining = plan.IsComplete ? "100%"
+            : left is { Minutes: { } rm } ? "~" + TimeEstimator.Format(rm)
+            : Loc.T(left is not null ? "estimate.overdue" : "game.noEstimate");
+        StatRemainingSub = plan.IsComplete ? Loc.T("game.allDone")
+            : left is null ? Loc.T("game.setInTime")
+            : CompletionSourceTitle(_game);
+    }
+
+    /// <summary>Counts the time left down with the play since the last unlock: once per minute of it.</summary>
+    private void CountDown()
+    {
+        if (_game is null || _plan is null) return;
+        var played = PlayedSinceUnlock(_game);
+        if (Math.Floor(played) == Math.Floor(_played)) return;
+        _played = played;
+        _countdown = _plan.CountDown(played);
+        foreach (var vm in Rows) vm.RefreshTime();
+        ShowPlan(_plan);
+        UpdateOverlayLists(_rows);
+        ShowRemaining();
     }
 
     /// <summary>Time to 100% source, for the header.</summary>
@@ -1147,7 +1191,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             else if (running != 0) _lastSession = null;
             UpdateSession();
             if (_lastRunningAppId != 0 && _game is { } played && played.AppId == _lastRunningAppId && _svc.HasApiKey)
-                _ = SafeAsync(() => AfterSessionAsync(played));
+            {
+                var session = _lastSession;
+                _ = SafeAsync(() => AfterSessionAsync(played, session));
+            }
             _lastRunningAppId = running;
             if (running != 0 && AutoFollow && running != _game?.AppId)
             {
@@ -1164,16 +1211,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _lastPoll = DateTime.Now;
             await SafeAsync(RefreshStateAsync);
         }
+        CountDown();
     }
 
     /// <summary>Steam counts a session's playtime a little after it ends; the new point goes to the playtime history.</summary>
-    private async Task AfterSessionAsync(GameData game)
+    /// <param name="session">The session if the app saw it from its start.</param>
+    private async Task AfterSessionAsync(GameData game, PlaySession? session)
     {
         await Task.Delay(TimeSpan.FromMinutes(2));
         if (_game != game || IsBusy || SteamLocal.RunningAppId() == game.AppId) return;
         try
         {
-            await _svc.RefreshPlaytimeAsync(game);
+            await _svc.RefreshPlaytimeAsync(game, session);
         }
         catch (Exception e) when (e is SteamApiException or System.Net.Http.HttpRequestException or TaskCanceledException)
         {
@@ -1189,8 +1238,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     private void UpdateSession()
     {
+        var now = DateTimeOffset.Now;
         var summary = _lastSession is { } session && _game is { } game && game.AppId == session.AppId && (_svc.HasApiKey || _svc.Bridge.Exists)
-            ? SessionSummary.Of(game, session, _selectedPercentile.Value)
+            ? SessionSummary.Of(game, session, _selectedPercentile.Value, now, _sessions.Played(game.AppId, now))
             : null;
         // A game started and closed at once is not worth a summary.
         if (summary is { Unlocked.Count: 0 } && summary.Duration < TimeSpan.FromMinutes(1)) summary = null;

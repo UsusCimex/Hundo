@@ -50,7 +50,7 @@ public static class Progress
 
         var segments = new List<(double Pace, double Weight)>();
         double lastMinutes = 0, lastProgress = 0;
-        foreach (var point in Points(game, now))
+        foreach (var point in Points(game, now, []))
         {
             double progress = done.Where(d => d.At <= point.At).Sum(d => d.Stretch);
             double played = point.Minutes - lastMinutes, progressed = progress - lastProgress;
@@ -66,6 +66,51 @@ public static class Progress
             lastProgress = progress;
         }
         return segments.Sum(s => s.Weight) >= minProgress ? WeightedMedian(segments) : null;
+    }
+
+    /// <summary>
+    /// Minutes played since the last unlock or mark, from the start of the game when there is none. Only play known to
+    /// come after it counts: between two known moments the play is taken to start as early as it can.
+    /// </summary>
+    /// <param name="played">The play the app saw (<see cref="SessionTracker.Played"/>): Steam's playtime shows a session only after it ends.</param>
+    public static double MinutesSinceProgress(GameData game, DateTimeOffset now, IReadOnlyList<PlaySession>? played = null)
+    {
+        DateTimeOffset? last = null;
+        foreach (var a in game.Achievements)
+        {
+            var state = game.States.GetValueOrDefault(a.ApiName);
+            DateTimeOffset? at = GameLogic.StatusOf(state, game.CountManualMarks) switch
+            {
+                EffectiveStatus.Unlocked => state!.SteamUnlockTime ?? DateTimeOffset.MinValue,
+                EffectiveStatus.ManualDone => state!.ManualAt ?? DateTimeOffset.MinValue,
+                _ => null,
+            };
+            if (at is { } t && (last is null || t > last)) last = t;
+        }
+
+        var points = Points(game, now, played ?? []);
+        double total = points[^1].Minutes;
+        if (last is not { } u) return total;
+        double then = total;
+        for (int i = 0; i < points.Count; i++)
+        {
+            if (points[i].At < u) continue;
+            then = i == 0 ? points[0].Minutes : Math.Min(points[i - 1].Minutes + (u - points[i - 1].At).TotalMinutes, points[i].Minutes);
+            break;
+        }
+        return Math.Max(0, total - then);
+    }
+
+    /// <summary>
+    /// Adds the start of a session the app saw to the history, now that Steam's playtime shows it: the playtime after
+    /// it less its length. Steam rounds to minutes; a session it has not counted yet does not fit the history and is skipped.
+    /// </summary>
+    public static void AddSessionStart(GameData game, PlaySession session, double minutesAfter)
+    {
+        double start = minutesAfter - (session.End - session.Start).TotalMinutes;
+        var before = game.PlaytimeHistory.LastOrDefault(p => p.At < session.Start);
+        if (before is not null && before.Minutes > start && before.Minutes - start <= 2) start = before.Minutes;
+        AddPlaytime(game, session.Start, start);
     }
 
     /// <summary>Points kept per game: years of play between sessions.</summary>
@@ -89,22 +134,35 @@ public static class Progress
         if (history.Count > MaxPlaytimePoints) history.RemoveRange(0, history.Count - MaxPlaytimePoints);
     }
 
-    /// <summary>Known playtime moments, oldest first, ending with the current playtime; manual corrections applied.</summary>
-    private static IEnumerable<PlaytimePoint> Points(GameData game, DateTimeOffset now)
+    /// <summary>
+    /// Known playtime moments, oldest first, ending with the current playtime; manual corrections applied.
+    /// Sessions after the last point of the history are not in Steam's playtime yet: they go on top of it.
+    /// </summary>
+    private static List<PlaytimePoint> Points(GameData game, DateTimeOffset now, IReadOnlyList<PlaySession> played)
     {
-        if (game.PlaytimeOverrideMinutes is { } own)
+        var raw = new List<PlaytimePoint>();
+        if (game.PlaytimeOverrideMinutes is null) raw.AddRange(game.PlaytimeHistory.Where(p => p.At < now).OrderBy(p => p.At));
+        double counted = game.PlaytimeOverrideMinutes ?? game.PlaytimeMinutes, extra = 0;
+        var since = raw.Count > 0 ? raw[^1].At : DateTimeOffset.MinValue;
+        foreach (var s in played.Where(s => s.End > since && s.Start < now).OrderBy(s => s.Start))
         {
-            yield return new PlaytimePoint { At = now, Minutes = own };
-            yield break;
+            var start = s.Start > since ? s.Start : since;
+            var end = s.End < now ? s.End : now;
+            raw.Add(new PlaytimePoint { At = start, Minutes = counted + extra });
+            extra += (end - start).TotalMinutes;
+            raw.Add(new PlaytimePoint { At = end, Minutes = counted + extra });
         }
-        var current = new PlaytimePoint { At = now, Minutes = game.PlaytimeMinutes };
-        double seen = 0;
-        foreach (var p in game.PlaytimeHistory.Where(p => p.At < now).OrderBy(p => p.At).Append(current))
+        raw.Add(new PlaytimePoint { At = now, Minutes = counted + extra });
+
+        double offset = game.PlaytimeOverrideMinutes is null ? game.PlaytimeOffsetMinutes : 0, seen = 0;
+        var points = new List<PlaytimePoint>(raw.Count);
+        foreach (var p in raw)
         {
             // Steam playtime only grows; the hours to ignore are taken from the oldest ones.
             seen = Math.Max(seen, p.Minutes);
-            yield return new PlaytimePoint { At = p.At, Minutes = Math.Max(0, seen - game.PlaytimeOffsetMinutes) };
+            points.Add(new PlaytimePoint { At = p.At, Minutes = Math.Max(0, seen - offset) });
         }
+        return points;
     }
 
     private static double? WeightedMedian(List<(double Value, double Weight)> items)

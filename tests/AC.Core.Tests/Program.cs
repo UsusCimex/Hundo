@@ -1042,12 +1042,115 @@ static class Tests
     public static void Session_TrackerReportsSessionsSeenFromTheStart()
     {
         var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
-        var tracker = new SessionTracker(runningAtStart: 7);
+        var tracker = new SessionTracker(runningAtStart: 7, t0.AddMinutes(-20));
         Assert.Equal<PlaySession?>(null, tracker.Observe(0, t0));
         Assert.Equal<PlaySession?>(null, tracker.Observe(5, t0.AddMinutes(1)));
         Assert.Equal<PlaySession?>(null, tracker.Observe(5, t0.AddMinutes(30)));
         Assert.Equal<PlaySession?>(new PlaySession(5, t0.AddMinutes(1), t0.AddMinutes(90)), tracker.Observe(9, t0.AddMinutes(90)));
         Assert.Equal<PlaySession?>(new PlaySession(9, t0.AddMinutes(90), t0.AddMinutes(95)), tracker.Observe(0, t0.AddMinutes(95)));
+
+        // All play seen is kept: a game running at the start counts from the app's start, the running one up to now.
+        Assert.Equal(new PlaySession(7, t0.AddMinutes(-20), t0), tracker.Played(7, t0.AddMinutes(100)).Single());
+        tracker.Observe(5, t0.AddMinutes(120));
+        Assert.Equal("1-90,120-130", string.Join(",", tracker.Played(5, t0.AddMinutes(130))
+            .Select(s => $"{(s.Start - t0).TotalMinutes}-{(s.End - t0).TotalMinutes}")));
+    }
+
+    public static void Progress_PlayedSinceTheLastUnlock()
+    {
+        var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
+        var g = SampleGame();
+        g.PlaytimeMinutes = 100;
+        Assert.Equal(100.0, Progress.MinutesSinceProgress(g, t0)); // nothing unlocked: all play counts
+
+        // ch1 at 18:00 between the points 17:00 (40 min) and 21:00 (200 min): the play is taken to start right after
+        // 17:00, so 60 of the 160 minutes came before the unlock and 100 after it; 30 more since 21:00.
+        g.PlaytimeHistory.Add(new PlaytimePoint { At = t0.AddHours(-1), Minutes = 40 });
+        g.PlaytimeHistory.Add(new PlaytimePoint { At = t0.AddHours(3), Minutes = 200 });
+        g.PlaytimeMinutes = 230;
+        g.StateOf("ch1").SteamUnlocked = true;
+        g.StateOf("ch1").SteamUnlockTime = t0;
+        Assert.Equal(130.0, Math.Round(Progress.MinutesSinceProgress(g, t0.AddDays(1)), 1));
+
+        // A mark counts as progress too, unless marks are off.
+        g.StateOf("misc").ManualDone = true;
+        g.StateOf("misc").ManualAt = t0.AddMinutes(190);
+        Assert.Equal(20.0, Math.Round(Progress.MinutesSinceProgress(g, t0.AddDays(1)), 1));
+        g.CountManualMarks = false;
+        Assert.Equal(130.0, Math.Round(Progress.MinutesSinceProgress(g, t0.AddDays(1)), 1));
+
+        g.PlaytimeOffsetMinutes = 30; // the ignored hours are the oldest ones
+        Assert.Equal(130.0, Math.Round(Progress.MinutesSinceProgress(g, t0.AddDays(1)), 1));
+    }
+
+    public static void Progress_PlayedCountsSessionsSteamHasNot()
+    {
+        var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
+        var g = SampleGame();
+        g.PlaytimeHistory.Add(new PlaytimePoint { At = t0, Minutes = 300 });
+        g.PlaytimeMinutes = 300;
+        g.StateOf("ch1").SteamUnlocked = true;
+        g.StateOf("ch1").SteamUnlockTime = t0.AddMinutes(-90);
+        // The point at 18:00 came after the unlock: those 0..300 minutes are not all known to be after it.
+        Assert.Equal(0.0, Progress.MinutesSinceProgress(g, t0.AddMinutes(30)));
+
+        // A session from 19:00, running at 19:40: Steam's playtime does not show it yet.
+        var running = new[] { new PlaySession(1, t0.AddHours(1), t0.AddMinutes(100)) };
+        Assert.Equal(40.0, Math.Round(Progress.MinutesSinceProgress(g, t0.AddMinutes(100), running), 1));
+
+        // misc came at 19:25: the countdown starts again from it.
+        g.StateOf("misc").SteamUnlocked = true;
+        g.StateOf("misc").SteamUnlockTime = t0.AddMinutes(85);
+        Assert.Equal(15.0, Math.Round(Progress.MinutesSinceProgress(g, t0.AddMinutes(100), running), 1));
+
+        // Steam's playtime was read after the session: its minutes are in the history now, not on top of it.
+        var ended = new PlaySession(1, t0.AddHours(1), t0.AddMinutes(130));
+        g.PlaytimeMinutes = 370;
+        Progress.AddSessionStart(g, ended, 370);
+        Progress.AddPlaytime(g, t0.AddMinutes(135), 370);
+        Assert.Equal(45.0, Math.Round(Progress.MinutesSinceProgress(g, t0.AddHours(5), [ended]), 1));
+    }
+
+    public static void Progress_SessionStartJoinsTheHistory()
+    {
+        var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
+        var session = new PlaySession(1, t0.AddHours(1), t0.AddMinutes(130.6));
+        var g = SampleGame();
+        g.PlaytimeHistory.Add(new PlaytimePoint { At = t0, Minutes = 300 });
+
+        // Steam counted 70 of the 70.6 minutes: the start is the playtime before the session.
+        Progress.AddSessionStart(g, session, 370);
+        Assert.Equal(300.0, g.PlaytimeHistory.Single(p => p.At == session.Start).Minutes);
+
+        // Steam has not counted the session yet: the start would contradict the history and is left out.
+        g.PlaytimeHistory.RemoveAll(p => p.At == session.Start);
+        Progress.AddSessionStart(g, session, 300);
+        Assert.True(g.PlaytimeHistory.All(p => p.At != session.Start), "a session Steam has not counted is left out");
+    }
+
+    public static void Planner_CountDown()
+    {
+        var g = SampleGame();
+        var plan = Planner.Build(g, Percentile.P50);
+        double misc = g.Estimates["misc"].P50!.Value, miscWide = g.Estimates["misc"].P90!.Value;
+        Assert.Equal(new Countdown(misc - 50, false), plan.CountDown(50)["misc"]);
+
+        // Past the estimate: more time with the wide margin, then none.
+        var late = plan.CountDown(100)["misc"];
+        Assert.True(late.Late && Math.Abs(late.Minutes!.Value - (miscWide - 100)) < 0.01, $"late {late}");
+        Assert.Equal(new Countdown(null, true), plan.CountDown(miscWide + 1)["misc"]);
+
+        // The most common one is at the very start: it still gets the least margin.
+        Assert.Equal(new Countdown(5, true), plan.CountDown(10)["ch1"]);
+
+        // The time to 100% is the longest countdown.
+        var total = plan.RemainingAfter(160)!.Value;
+        Assert.True(!total.Late && Math.Abs(total.Minutes!.Value - 440) < 0.01, $"total {total}");
+        Assert.Equal(new Countdown(null, true), plan.RemainingAfter(5000));
+
+        // With the wide margin chosen, past it there is only the least margin.
+        var wide = Planner.Build(g, Percentile.P90).CountDown(miscWide + 5)["misc"];
+        Assert.True(wide.Late && Math.Abs(wide.Minutes!.Value - (Planner.MinMarginMinutes - 5)) < 0.01, $"wide {wide}");
     }
 
     public static void Session_SummaryTakesBackItsUnlocks()
@@ -1066,13 +1169,19 @@ static class Tests
         Unlock(g, "misc", start.AddMinutes(70));
         Unlock(g, "ch5", start.AddMinutes(20));
 
-        var s = SessionSummary.Of(g, new PlaySession(1, start, start.AddMinutes(90)), Percentile.P50);
+        var session = new PlaySession(1, start, start.AddMinutes(90));
+        var s = SessionSummary.Of(g, session, Percentile.P50, session.End, []);
         Assert.Equal("ch5,misc", string.Join(",", s.Unlocked.Select(a => a.ApiName)));
         Assert.Equal(TimeSpan.FromMinutes(90), s.Duration);
         Assert.Equal(Planner.Build(earlier, Percentile.P50).RemainingMinutes, s.LeftBefore);
         Assert.Equal(Planner.Build(g, Percentile.P50).RemainingMinutes, s.LeftAfter);
         Assert.True(s.LeftBefore > s.LeftAfter, $"before {s.LeftBefore}, after {s.LeftAfter}");
         Assert.True(g.States["ch5"].SteamUnlocked && g.States["misc"].SteamUnlocked, "the game is left as it was");
+
+        // The app saw the session: the 20 minutes after misc count down the time to 100%, the play before does not.
+        s = SessionSummary.Of(g, session, Percentile.P50, session.End, [session]);
+        Assert.Equal(Planner.Build(earlier, Percentile.P50).RemainingMinutes, s.LeftBefore);
+        Assert.Equal(Math.Round(Planner.Build(g, Percentile.P50).RemainingMinutes!.Value - 20, 1), Math.Round(s.LeftAfter!.Value, 1));
     }
 
     public static void Summary_SortsByTimeLeft()

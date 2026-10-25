@@ -160,8 +160,8 @@ public sealed class UnlockLogEntry
 /// <summary>Game progress for the library list.</summary>
 public sealed record GameSummary
 {
-    /// <summary>Summaries of an older format lack fields and are rebuilt from the game files.</summary>
-    public const int CurrentFormat = 2;
+    /// <summary>Summaries of an older format lack fields or count differently and are rebuilt from the game files.</summary>
+    public const int CurrentFormat = 3;
 
     public int Format { get; init; }
     public int Unlocked { get; init; }
@@ -170,10 +170,11 @@ public sealed record GameSummary
     /// <summary>Typical time left to 100%; null - finished or no estimate.</summary>
     public double? RemainingMinutes { get; init; }
 
-    public static GameSummary Of(GameData game)
+    /// <param name="played">Minutes played since the last unlock; null - as far as the playtime history tells.</param>
+    public static GameSummary Of(GameData game, double? played = null)
     {
         var (u, m, total) = GameLogic.Progress(game);
-        var left = Planner.Build(game, Percentile.P50).RemainingMinutes;
+        var left = Planner.Build(game, Percentile.P50).RemainingAfter(played ?? Progress.MinutesSinceProgress(game, DateTimeOffset.Now))?.Minutes;
         return new GameSummary { Format = CurrentFormat, Unlocked = u, Manual = m, Total = total, RemainingMinutes = left is { } v ? Math.Round(v) : null };
     }
 

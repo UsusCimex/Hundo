@@ -115,6 +115,10 @@
   "estimate.none": "No estimate",
   "estimate.fromStart": "{0} from the start",
   "estimate.left": "{0} left",
+  "estimate.overdue": "taking longer",
+  "estimate.lateTip": "You are taking longer than a typical player: the time left has a wide margin",
+  "estimate.overdueTip": "Longer than even the wide margin: no estimate",
+  "estimate.missedTip": "Longer than even the wide margin: check that it was not missed",
 
   "details.empty": "Select an achievement to set its type, group, estimate and note",
   "details.percent": "Players",
@@ -145,6 +149,7 @@
   "plan.upTo": "up to {0}",
   "plan.complete": "All achievements unlocked",
   "plan.remaining": "About {0} to 100%",
+  "plan.overdue": "To 100%: taking longer than estimated",
   "plan.pace": " at your pace ({0}x slower than a typical player)",
   "plan.unknown": {
     "one": "; {0} achievement has no estimate",

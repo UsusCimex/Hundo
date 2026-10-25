@@ -22,9 +22,13 @@ public static class SteamLocal
         return string.IsNullOrEmpty(p) ? null : Path.GetFullPath(p.Replace('/', Path.DirectorySeparatorChar));
     }
 
-    /// <summary>Running game AppID (Steam writes it itself), 0 - nothing is running.</summary>
+    /// <summary>
+    /// Running game AppID (Steam writes it itself), 0 - nothing is running.
+    /// AC_RUNNING_APPID makes the app take that game for the running one: to check what happens during play without a game.
+    /// </summary>
     public static uint RunningAppId()
     {
+        if (uint.TryParse(Environment.GetEnvironmentVariable("AC_RUNNING_APPID"), out var fake)) return fake;
         var v = Registry.GetValue(SteamKey, "RunningAppID", 0);
         return v switch
         {

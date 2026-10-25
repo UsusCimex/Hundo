@@ -28,6 +28,7 @@ The script works on copies of the build and of the data folder, so the real fold
 | `AC_NO_STEAM_CLIENT=1` | the app never connects to the Steam client |
 | `AC_SOFTWARE_RENDERING=1` | software rendering: hardware rendering stops while the display is off |
 | `AC_UPDATE_URL` | another "latest release" JSON, for testing updates against a local server |
+| `AC_RUNNING_APPID` | the app takes this game for the running one: checks of what happens during play without a game |
 
 ## Structure
 
@@ -93,7 +94,8 @@ The app was first called Achievement Companion: the data folder, the DPAPI entro
 - T (time to 100%): manual, else Steam Hunters, else the sample median, else derived from own pace.
 - Stretch (`Progress`): on the "minutes from the start" scale every achievement owns the way from the previous one to it. Stretches of unlocked ones are the progress made, of locked ones what is left, in any order of unlocks.
 - Time left (`Planner`): the stretches of locked achievements times the pace; to one achievement, those of the locked ones up to it. Own estimates get the P75 and P90 margins too. Achievement hours show the time from the start or the time left (a setting).
-- Pace: Steam minutes between playtime snapshots (`PlaytimeHistory`: when a game loads outside a session, after a session, and two weeks back from Steam) divided by the progress made between them, as a progress-weighted median. Stretches without progress (AFK, a game left open) do not count. From 1 to 3: faster than the median gives no speed-up.
+- Countdown (`Plan.CountDown`): the time left less the minutes played since the last unlock or mark (`Progress.MinutesSinceProgress`): the play known to come after it by the playtime history, plus the sessions the app saw that Steam's playtime does not show yet (`SessionTracker`). Past the estimate the wide margin (P90, at least 15 minutes) gives more time; past that there is no estimate, and a missable one is probably missed.
+- Pace: Steam minutes between playtime snapshots (`PlaytimeHistory`: when a game loads outside a session, after a session together with its start when the app saw it, and two weeks back from Steam) divided by the progress made between them, as a progress-weighted median. Stretches without progress (AFK, a game left open) do not count. From 1 to 3: faster than the median gives no speed-up.
 - Sample (`SampleStats`): up to 300 review authors until 80 public profiles, collected again in the background when over a week old; between "moment - minutes played" points play is taken as even.
 
 ## Rules
