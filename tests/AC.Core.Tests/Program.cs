@@ -379,6 +379,12 @@ static class Tests
         q.Status = StatusFilter.Open;
         q.TimeLeft = new Dictionary<string, double> { ["miss"] = 5, ["misc"] = 50 };
         Assert.Equal("miss,misc,ch1", string.Join(",", q.Apply(g, Percentile.P50).Select(r => r.ApiName)));
+
+        // Unlocked without a date: still before the locked ones, the list groups them apart.
+        g.StateOf("miss").SteamUnlocked = true;
+        q.Status = StatusFilter.All;
+        q.TimeLeft = new Dictionary<string, double> { ["ch1"] = 10, ["misc"] = 50 };
+        Assert.Equal("grind,ch5,miss,ch1,misc", string.Join(",", q.Apply(g, Percentile.P50).Select(r => r.ApiName)));
     }
 
     public static void Export_CsvHasBomAndEscapes()
@@ -462,11 +468,11 @@ static class Tests
         try
         {
             Loc.SetLanguage("ru");
-            Assert.Equal("Время", Loc.T("tabs.time"));
+            Assert.Equal("Получены", Loc.T("list.done"));
             Assert.Equal("Загружено 21 достижение", Loc.Plural("status.gameLoaded", 21));
             Assert.Equal("russian", Loc.SteamLanguage(Loc.Language));
             Loc.SetLanguage("en");
-            Assert.Equal("Time", Loc.T("tabs.time"));
+            Assert.Equal("Unlocked", Loc.T("list.done"));
             Assert.Equal("Loaded 1 achievement", Loc.Plural("status.gameLoaded", 1));
             Assert.Equal("Loaded 21 achievements", Loc.Plural("status.gameLoaded", 21));
             Assert.Equal("no.such.key", Loc.T("no.such.key"));

@@ -11,7 +11,7 @@
 
 ![Achievements of a game](docs/images/main.png)
 
-![Plan to 100%](docs/images/plan.png)
+![Unlock history](docs/images/history.png)
 
 <p align="center">
   <img src="docs/images/overlay.png" width="440" alt="Overlay over the game" />

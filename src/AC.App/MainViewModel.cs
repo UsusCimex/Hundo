@@ -12,12 +12,6 @@ using Microsoft.Win32;
 
 namespace AC.App;
 
-public sealed record PlanGroupViewModel(string Label, string Longest, IReadOnlyList<AchievementRowViewModel> Items);
-
-public sealed record PlanSectionViewModel(string Title, IReadOnlyList<PlanGroupViewModel> Groups);
-
-public sealed record HistoryRowViewModel(string Date, string Count, string Names);
-
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
     private readonly GameService _svc;
@@ -43,6 +37,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _svc = svc;
         _summaries = new Dictionary<uint, GameSummary>(svc.Store.LoadSummaries());
         LibraryView = CollectionViewSource.GetDefaultView(Library);
+        _rowsView = (ListCollectionView)CollectionViewSource.GetDefaultView(Rows);
         LibraryView.Filter = o => o is LibraryItemViewModel g &&
             (!LibraryStartedOnly || g.IsStarted) &&
             (string.IsNullOrWhiteSpace(_libraryFilter) || g.Name.Contains(_libraryFilter.Trim(), StringComparison.CurrentCultureIgnoreCase));
@@ -76,6 +71,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         DownloadUpdateCommand = new RelayCommand(() => OpenUrl(_update?.DownloadUrl), () => _update != null);
         UpdateNotesCommand = new RelayCommand(() => OpenUrl(_update?.PageUrl), () => _update != null);
         CloseSessionCommand = new RelayCommand(() => { _lastSession = null; UpdateSession(); });
+        CloseTimeCommand = new RelayCommand(() => IsTimeOpen = false);
         OpenGuideTipCommand = new RelayCommand(p => OpenUrl(p is AchievementRowViewModel r ? GuideTipFor(r.ApiName)?.Url : null));
         TranslateTipCommand = new AsyncCommand(p => TranslateTipAsync(p as AchievementRowViewModel), OnError);
 
@@ -179,7 +175,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public Option<AchievementKind?> KindFilter { get => _kindFilter; set { if (Set(ref _kindFilter, value)) Recompute(rebuildRows: true); } }
 
     private Option<SortMode> _selectedSort;
-    public Option<SortMode> SelectedSort { get => _selectedSort; set { if (Set(ref _selectedSort, value)) Recompute(rebuildRows: true); } }
+    public Option<SortMode> SelectedSort
+    {
+        get => _selectedSort;
+        set
+        {
+            if (!Set(ref _selectedSort, value)) return;
+            OnPropertyChanged(nameof(ShowsHistory));
+            Recompute(rebuildRows: true);
+        }
+    }
 
     private bool _descending;
     public bool Descending { get => _descending; set { if (Set(ref _descending, value)) Recompute(rebuildRows: true); } }
@@ -235,12 +240,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Manual marks and Steam writes are enabled in settings.</summary>
     public bool ManualUnlocks => _svc.Settings.ManualUnlocks;
 
-    public string PlanHint => Loc.T(ManualUnlocks ? "plan.hintManual" : "plan.hint");
-
     // ---------- current game data ----------
 
     public ObservableCollection<AchievementRowViewModel> Rows { get; } = new();
-    public ObservableCollection<PlanSectionViewModel> PlanSections { get; } = new();
+    private readonly ListCollectionView _rowsView;
+    /// <summary>The plan's headings with the achievements under them, for their "up to N h".</summary>
+    private List<(ListSection Heading, List<string> ApiNames)> _timed = [];
     /// <summary>Overlay: locked missables.</summary>
     public ObservableCollection<AchievementRowViewModel> OverlayMissable { get; } = new();
     /// <summary>Overlay: nearest by time.</summary>
@@ -286,14 +291,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public IReadOnlyList<UnlockDay> HistoryDays
     {
         get => _historyDays;
-        private set { if (Set(ref _historyDays, value)) OnPropertyChanged(nameof(HasHistory)); }
+        private set
+        {
+            if (!Set(ref _historyDays, value)) return;
+            OnPropertyChanged(nameof(HasHistory));
+            OnPropertyChanged(nameof(ShowsHistory));
+        }
     }
 
     public bool HasHistory => _historyDays.Count > 0;
 
-    /// <summary>The days of <see cref="HistoryDays"/>, newest first.</summary>
-    private IReadOnlyList<HistoryRowViewModel> _historyRows = [];
-    public IReadOnlyList<HistoryRowViewModel> HistoryRows { get => _historyRows; private set => Set(ref _historyRows, value); }
+    /// <summary>The chart of unlocks goes over the list sorted by date.</summary>
+    public bool ShowsHistory => HasHistory && _selectedSort.Value == SortMode.UnlockTime;
+
+    private bool _isTimeOpen;
+    /// <summary>The panel under the header: where the time to 100% comes from and how to correct it.</summary>
+    public bool IsTimeOpen { get => _isTimeOpen; set => Set(ref _isTimeOpen, value); }
 
     private bool _hasSession;
     public bool HasSession { get => _hasSession; private set => Set(ref _hasSession, value); }
@@ -379,6 +392,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Look up how to get the selected achievement online: steam, discussions, youtube, google.</summary>
     public RelayCommand OpenGuideCommand { get; }
     public RelayCommand CloseSessionCommand { get; }
+    public RelayCommand CloseTimeCommand { get; }
     /// <summary>Opens the guide section a tip comes from. Parameter: the row.</summary>
     public RelayCommand OpenGuideTipCommand { get; }
     /// <summary>Shows a tip in the interface language, or the original again. Parameter: the row.</summary>
@@ -958,7 +972,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         OnPropertyChanged(nameof(HideSpoilers));
         OnPropertyChanged(nameof(ManualUnlocks));
-        OnPropertyChanged(nameof(PlanHint));
         OnPropertyChanged(nameof(QueueVisible));
         OnPropertyChanged(nameof(HasApiKey));
         OnPropertyChanged(nameof(QueueText));
@@ -997,7 +1010,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (_kindFilter.Value is { } k) query.Kinds.Add(k);
             var selectedApi = SelectedRow?.ApiName;
             Rows.Clear();
-            foreach (var r in query.Apply(_game, p)) Rows.Add(new AchievementRowViewModel(this, r));
+            GroupRows();
+            foreach (var vm in WithHeadings(query.Apply(_game, p))) Rows.Add(vm);
             SelectedRow = selectedApi is null ? null : Rows.FirstOrDefault(r => r.ApiName == selectedApi);
         }
 
@@ -1014,7 +1028,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         CountOpen = CountAll - CountDone;
         CountNotCounted = all.Count(r => r.Status == EffectiveStatus.ManualDone);
 
-        ShowPlan(plan);
+        ShowHeadingNotes();
 
         var (u, m, total) = GameLogic.Progress(_game);
         var steamPct = Number(total == 0 ? 0 : 100.0 * u / total);
@@ -1052,11 +1066,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 sf.ToLocalTime().ToString("d", CultureInfo.CurrentCulture))
             : Loc.T("time.sampleNone");
         QueueCount = _game.PendingUnlocks.Count;
-        var history = UnlockHistory.ByDay(_game, TimeZoneInfo.Local);
-        var language = CultureInfo.GetCultureInfo(Loc.Language);
-        HistoryDays = history;
-        HistoryRows = history.Reverse().Select(d => new HistoryRowViewModel(
-            d.Day.ToString(Loc.T("history.date"), language), $"+{d.Unlocked.Count}", string.Join(", ", d.Unlocked.Select(a => a.Name)))).ToList();
+        HistoryDays = UnlockHistory.ByDay(_game, TimeZoneInfo.Local);
         UpdateOverlayLists(all);
 
         var summary = GameSummary.Of(_game, _played);
@@ -1069,20 +1079,84 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UpdateSession();
     }
 
-    private void ShowPlan(Plan plan)
+    /// <summary>The list sorted by plan or by date goes under headings; the other sorts are flat.</summary>
+    private void GroupRows()
     {
-        PlanSections.Clear();
-        foreach (var s in plan.Sections)
+        string[] levels = _selectedSort.Value switch
         {
-            var groups = s.Groups.Select(g =>
+            SortMode.Plan => [nameof(AchievementRowViewModel.Section), nameof(AchievementRowViewModel.Subsection)],
+            SortMode.UnlockTime => [nameof(AchievementRowViewModel.Section)],
+            _ => [],
+        };
+        var groups = _rowsView.GroupDescriptions;
+        if (groups.OfType<PropertyGroupDescription>().Select(g => g.PropertyName).SequenceEqual(levels)) return;
+        groups.Clear();
+        foreach (var level in levels) groups.Add(new PropertyGroupDescription(level));
+    }
+
+    /// <summary>The rows under their headings: by plan the stages and the named groups in them, by date the days.</summary>
+    private List<AchievementRowViewModel> WithHeadings(IReadOnlyList<AchievementRow> rows)
+    {
+        var headings = new Dictionary<string, ListSection>(StringComparer.OrdinalIgnoreCase);
+        ListSection Heading(string key, string title) => headings.TryGetValue(key, out var h) ? h : headings[key] = new ListSection(title);
+        var timed = new Dictionary<ListSection, List<string>>();
+        void Time(ListSection heading, string apiName)
+        {
+            if (!timed.TryGetValue(heading, out var names)) timed[heading] = names = [];
+            names.Add(apiName);
+        }
+
+        var language = CultureInfo.GetCultureInfo(Loc.Language);
+        var days = new HashSet<ListSection>();
+        var result = new List<AchievementRowViewModel>(rows.Count);
+        foreach (var r in rows)
+        {
+            ListSection? section = null, subsection = null;
+            switch (_selectedSort.Value)
             {
-                var longest = ShowTimeLeft ? g.Items.Max(HoursOf) : g.LongestMinutes;
-                return new PlanGroupViewModel(
-                    g.Label.Length > 0 ? g.Label : Loc.T("plan.noGroup"),
-                    longest is null ? "" : Loc.T("plan.upTo", TimeEstimator.Format(longest)),
-                    g.Items.Select(i => new AchievementRowViewModel(this, i)).ToList());
-            }).ToList();
-            PlanSections.Add(new PlanSectionViewModel($"{Options.StageTitle(s.Stage)} ({s.Count})", groups));
+                case SortMode.Plan when r.IsDone:
+                    section = Heading("done", Loc.T("list.done"));
+                    subsection = ListSection.None;
+                    break;
+                case SortMode.Plan:
+                    var stage = Planner.StageOf(r.Kind);
+                    section = Heading("stage " + stage, Options.StageTitle(stage));
+                    Time(section, r.ApiName);
+                    // As the planner groups them: by the trimmed name, ignoring case.
+                    var group = r.Group.Trim();
+                    subsection = group.Length == 0 ? ListSection.None : Heading("group " + stage + " " + group, group);
+                    if (subsection != ListSection.None) Time(subsection, r.ApiName);
+                    break;
+                case SortMode.UnlockTime when r.UnlockTime is { } time:
+                    var day = DateOnly.FromDateTime(time.ToLocalTime().DateTime);
+                    section = Heading("day " + day.DayNumber, day.ToString(Loc.T("history.date"), language));
+                    days.Add(section);
+                    break;
+                case SortMode.UnlockTime:
+                    section = r.IsDone ? Heading("done", Loc.T("list.done")) : Heading("open", Loc.T("list.open"));
+                    break;
+            }
+            result.Add(new AchievementRowViewModel(this, r) { Section = section, Subsection = subsection });
+        }
+        // A number after a date reads as part of it: a day says how many it gave on the right.
+        foreach (var under in result.Where(vm => vm.Section is not null).GroupBy(vm => vm.Section!))
+        {
+            if (days.Contains(under.Key)) under.Key.Note = "+" + under.Count().ToString(CultureInfo.CurrentCulture);
+            else under.Key.Count = under.Count().ToString(CultureInfo.CurrentCulture);
+        }
+        _timed = timed.Select(kv => (kv.Key, kv.Value)).ToList();
+        return result;
+    }
+
+    /// <summary>"Up to N h" on the plan's headings: the hours of the last achievement under each, as the cards show them.</summary>
+    private void ShowHeadingNotes()
+    {
+        if (_timed.Count == 0) return;
+        var rows = _rows.ToDictionary(r => r.ApiName, StringComparer.Ordinal);
+        foreach (var (heading, names) in _timed)
+        {
+            var longest = names.Select(n => rows.TryGetValue(n, out var r) ? HoursOf(r) : null).Max();
+            heading.Note = longest is null ? "" : Loc.T("plan.upTo", TimeEstimator.Format(longest));
         }
     }
 
@@ -1115,7 +1189,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _played = played;
         _countdown = _plan.CountDown(played);
         foreach (var vm in Rows) vm.RefreshTime();
-        ShowPlan(_plan);
+        ShowHeadingNotes();
         UpdateOverlayLists(_rows);
         ShowRemaining();
     }
@@ -1154,7 +1228,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void Reveal(string apiName)
     {
         if (_game is null || !_revealed.Add(RevealKey(_game.AppId, apiName))) return;
-        foreach (var vm in Rows.Concat(PlanSections.SelectMany(s => s.Groups).SelectMany(g => g.Items)))
+        foreach (var vm in Rows)
             if (vm.ApiName == apiName) vm.RefreshSpoiler();
     }
 

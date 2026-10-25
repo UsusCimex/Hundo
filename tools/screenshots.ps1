@@ -4,8 +4,8 @@
 .DESCRIPTION
     Works on copies: the build runs with the Steam client turned off (AC_NO_STEAM_CLIENT, so it cannot show you
     in-game or write achievements), the data folder goes to a temp folder (the original is untouched). The data folder needs settings.json and
-    games\<appid>.json; the game from LastAppId opens. Takes the main window, the plan, time and history tabs, the overlay over the
-    main window and the overlay alone on a transparent background.
+    games\<appid>.json; the game from LastAppId opens. Takes the main window (sorted by plan), the time panel, the list
+    sorted by date with the chart, the overlay over the main window and the overlay alone on a transparent background.
     -Set overrides settings in the copy: "Key=value;Key=value", the value is JSON or a string.
 .EXAMPLE
     dotnet build -c Release
@@ -89,7 +89,14 @@ function WaitFor([scriptblock] $check, [int] $seconds, [string] $what) {
     throw "Timed out waiting for $what"
 }
 function ById($root, $id) { $root.FindFirst($TS::Descendants, (Cond $AE::AutomationIdProperty $id)) }
-function SelectTab($root, $id) { (ById $root $id).GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select() }
+function Toggle($root, $id) { (ById $root $id).GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle() }
+function SelectOption($root, $id, [int] $index) {
+    $box = ById $root $id
+    $box.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+    $options = WaitFor { $o = $box.FindAll($TS::Descendants, (Cond $AE::ControlTypeProperty $CT::ListItem)); if ($o.Count -gt $index) { , $o } } 10 "the options of $id"
+    $options[$index].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    $box.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse()
+}
 
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("ac-shots-" + [Guid]::NewGuid().ToString("N"))
 $app = Join-Path $tmp "app"
@@ -127,29 +134,26 @@ try {
     [Shot]::TopMost($hwnd)
     $win = $AE::FromHandle($hwnd)
     $list = WaitFor { ById $win "AchievementList" } 30 "the list"
-    $items = WaitFor { $i = $list.FindAll($TS::Children, (Cond $AE::ControlTypeProperty $CT::ListItem)); if ($i.Count -gt $SelectIndex) { , $i } } 60 "achievements"
+    # Sorted by plan, the list is grouped under headings: the cards are deeper than its children.
+    $items = WaitFor { $i = $list.FindAll($TS::Descendants, (Cond $AE::ControlTypeProperty $CT::ListItem)); if ($i.Count -gt $SelectIndex) { , $i } } 60 "achievements"
     $items[$SelectIndex].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
     Start-Sleep -Seconds 4
     # Other windows may have come up while waiting (the window is shot as it is on screen).
     [Shot]::TopMost($hwnd); Start-Sleep -Milliseconds 300
     [Shot]::Grab($hwnd, (Join-Path $OutDir "main-$suffix.png"))
 
-    SelectTab $win "PlanTab"
-    Start-Sleep -Seconds 3
-    [Shot]::TopMost($hwnd); Start-Sleep -Milliseconds 300
-    [Shot]::Grab($hwnd, (Join-Path $OutDir "plan-$suffix.png"))
-
-    SelectTab $win "TimeTab"
+    Toggle $win "TimeTile"
     Start-Sleep -Seconds 2
     [Shot]::TopMost($hwnd); Start-Sleep -Milliseconds 300
     [Shot]::Grab($hwnd, (Join-Path $OutDir "time-$suffix.png"))
+    Toggle $win "TimeTile"
 
-    SelectTab $win "HistoryTab"
-    Start-Sleep -Seconds 2
+    # The fifth sort is by unlock date.
+    SelectOption $win "SortBox" 4
+    Start-Sleep -Seconds 3
     [Shot]::TopMost($hwnd); Start-Sleep -Milliseconds 300
     [Shot]::Grab($hwnd, (Join-Path $OutDir "history-$suffix.png"))
-
-    SelectTab $win "AchievementsTab"
+    SelectOption $win "SortBox" 0
     (ById $win "OverlayButton").GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
     $overlay = WaitFor { $AE::RootElement.FindFirst($TS::Children, (Both (Cond $AE::ProcessIdProperty $p.Id) (Cond $AE::AutomationIdProperty "Overlay"))) } 15 "the overlay"
     $ovh = [IntPtr]$overlay.Current.NativeWindowHandle

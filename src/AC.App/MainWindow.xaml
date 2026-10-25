@@ -90,15 +90,6 @@
             </Style.Triggers>
         </Style>
 
-        <Style x:Key="LateText" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsLate}" Value="True">
-                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
         <Style x:Key="SpoilerTip" TargetType="TextBlock">
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
@@ -234,6 +225,68 @@
             <Setter Property="BorderThickness" Value="1" />
         </Style>
 
+        <!-- The "To 100%" tile opens the time panel. -->
+        <Style x:Key="HeroTileToggle" TargetType="ToggleButton">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" CornerRadius="8" Padding="12,8" BorderThickness="1" Background="#1FFFFFFF" BorderBrush="#26FFFFFF">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2EFFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#38FFFFFF" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#73FFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Headings of the list sorted by plan or by date: the stage or the day, then the plan's group in the stage. -->
+        <DataTemplate x:Key="SectionHeading">
+            <DockPanel Margin="2,10,20,8">
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Name.Note}" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis">
+                    <Run Text="{Binding Name.Title, Mode=OneWay}" />
+                    <Run Text="{Binding Name.Count, Mode=OneWay}" FontWeight="Normal" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </TextBlock>
+            </DockPanel>
+        </DataTemplate>
+
+        <!-- Without the default indent of a group's rows: they line up with the headings. -->
+        <Style x:Key="ListGroup" TargetType="GroupItem">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GroupItem">
+                        <StackPanel>
+                            <ContentPresenter x:Name="PART_Header" />
+                            <ItemsPresenter x:Name="ItemsPresenter" />
+                        </StackPanel>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="SubsectionHeading">
+            <DockPanel x:Name="Heading" Margin="2,2,20,6">
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Name.Note}" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                <TextBlock Text="{Binding Name.Title}" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+            </DockPanel>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Name.Title}" Value="">
+                    <Setter TargetName="Heading" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
         <DataTemplate x:Key="AchievementCard">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -327,40 +380,6 @@
             </Grid>
         </DataTemplate>
 
-        <DataTemplate x:Key="PlanItem">
-            <Grid Margin="0,5">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="40" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="120" />
-                    <ColumnDefinition Width="64" />
-                </Grid.ColumnDefinitions>
-                <CheckBox MinWidth="0" VerticalAlignment="Center" Margin="0,0,4,0"
-                          IsChecked="{Binding ManualDone, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                          Visibility="{Binding DataContext.ManualUnlocks, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"
-                          ToolTip="{local:Tr plan.doneTip}" />
-                <Border Grid.Column="1" Width="32" Height="32" CornerRadius="4" VerticalAlignment="Center"
-                        Background="{DynamicResource SubtleFillColorSecondaryBrush}">
-                    <Border CornerRadius="4" local:RemoteImage.DecodeWidth="64" local:RemoteImage.Url="{Binding Icon}" />
-                </Border>
-                <StackPanel Grid.Column="2" Margin="8,0,12,0" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding Name}" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
-                    <TextBlock Text="{local:Tr card.missed}" Style="{StaticResource Caption}" ToolTip="{local:Tr card.missedTip}"
-                               Foreground="{DynamicResource SystemFillColorCautionBrush}"
-                               Visibility="{Binding IsProbablyMissed, Converter={StaticResource BoolToVis}}" />
-                    <Grid Visibility="{Binding Description, Converter={StaticResource EmptyToCollapsed}}">
-                        <TextBlock Text="{Binding Description}" FontSize="12" Style="{StaticResource SpoilerText}" />
-                        <Button Style="{StaticResource RevealButton}" Command="{Binding RevealCommand}"
-                                Visibility="{Binding IsSpoilerHidden, Converter={StaticResource BoolToVis}}" />
-                    </Grid>
-                </StackPanel>
-                <TextBlock Grid.Column="3" Text="{Binding Estimate}" HorizontalAlignment="Right" VerticalAlignment="Center"
-                           ToolTip="{Binding EstimateHint}" Style="{StaticResource LateText}" />
-                <TextBlock Grid.Column="4" Text="{Binding Percent}" HorizontalAlignment="Right" VerticalAlignment="Center"
-                           Style="{StaticResource RarityPercent}" />
-            </Grid>
-        </DataTemplate>
     </Window.Resources>
 
     <Grid>
@@ -463,11 +482,12 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Grid.RowSpan="4" VerticalAlignment="Center" HorizontalAlignment="Center"
+            <StackPanel Grid.Row="0" Grid.RowSpan="5" VerticalAlignment="Center" HorizontalAlignment="Center"
                         Visibility="{Binding HasGame, Converter={StaticResource InverseVis}}">
                 <TextBlock Text="&#xE8F1;" Style="{StaticResource Glyph}" FontSize="48" HorizontalAlignment="Center"
                            Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
@@ -528,13 +548,28 @@
                                     <TextBlock Text="{Binding StatUnlockedSub}" FontSize="12" Foreground="#AEB8C4" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                             </Border>
-                            <Border Style="{StaticResource HeroTile}" Margin="0,0,8,0" ToolTip="{Binding RemainingText}">
+                            <ToggleButton Style="{StaticResource HeroTileToggle}" Margin="0,0,8,0" IsChecked="{Binding IsTimeOpen}"
+                                          ToolTip="{local:Tr game.timeTip}" AutomationProperties.AutomationId="TimeTile">
                                 <StackPanel>
-                                    <TextBlock Text="{local:Tr game.toComplete}" FontSize="12" Foreground="#AEB8C4" />
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Right" FontSize="10" Foreground="#AEB8C4">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Glyph}">
+                                                    <Setter Property="Text" Value="&#xE70D;" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsTimeOpen}" Value="True">
+                                                            <Setter Property="Text" Value="&#xE70E;" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock Text="{local:Tr game.toComplete}" FontSize="12" Foreground="#AEB8C4" />
+                                    </DockPanel>
                                     <TextBlock Text="{Binding StatRemaining}" FontSize="22" FontWeight="SemiBold" Foreground="White" />
                                     <TextBlock Text="{Binding StatRemainingSub}" FontSize="12" Foreground="#AEB8C4" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
-                            </Border>
+                            </ToggleButton>
                             <Border Style="{StaticResource HeroTile}">
                                 <StackPanel>
                                     <TextBlock Text="{local:Tr game.played}" FontSize="12" Foreground="#AEB8C4" />
@@ -547,7 +582,79 @@
                 </Grid>
             </Grid>
 
-            <Border Grid.Row="1" Style="{StaticResource Card}" Padding="14,10" Margin="0,12,0,0" AutomationProperties.AutomationId="SessionSummary"
+            <Border Grid.Row="1" Style="{StaticResource Card}" Padding="16,12,12,14" Margin="0,12,0,0" AutomationProperties.AutomationId="TimePanel"
+                    Visibility="{Binding IsTimeOpen, Converter={StaticResource BoolToVis}}">
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+                        <Button DockPanel.Dock="Right" VerticalAlignment="Top" Padding="8,5" Margin="12,0,0,0" Command="{Binding CloseTimeCommand}"
+                                ToolTip="{local:Tr time.close}" AutomationProperties.AutomationId="CloseTime">
+                            <TextBlock Text="&#xE711;" Style="{StaticResource Glyph}" FontSize="10" />
+                        </Button>
+                        <TextBlock Text="{Binding RemainingText}" Style="{StaticResource Subtitle}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="28" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="28" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel>
+                            <TextBlock Text="{local:Tr time.completionTitle}" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                            <TextBlock Text="{local:Tr time.completionHint}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,10" />
+                            <WrapPanel>
+                                <TextBox Width="80" Text="{Binding CompletionInput, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,8" />
+                                <TextBlock Text="{local:Tr time.hours}" VerticalAlignment="Center" Margin="0,0,12,8" Style="{StaticResource Muted}" />
+                                <Button Content="{local:Tr time.apply}" Margin="0,0,8,8" Command="{Binding ApplyCompletionCommand}" />
+                                <Button Content="{local:Tr time.fetch}" Margin="0,0,8,8" Command="{Binding FetchCompletionCommand}" />
+                            </WrapPanel>
+                            <TextBlock Text="{Binding CompletionText}" Style="{StaticResource Caption}" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="{local:Tr time.playtimeTitle}" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                            <TextBlock Text="{local:Tr time.playtimeHint}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,10" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="{local:Tr time.override}" VerticalAlignment="Center" Margin="0,0,8,8" TextWrapping="Wrap"
+                                           ToolTip="{local:Tr time.overrideTip}" />
+                                <TextBox Grid.Column="1" Width="80" Margin="0,0,0,8"
+                                         Text="{Binding PlaytimeOverrideInput, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Grid.Row="1" Text="{local:Tr time.offset}" VerticalAlignment="Center" Margin="0,0,8,8" TextWrapping="Wrap"
+                                           ToolTip="{local:Tr time.offsetTip}" />
+                                <TextBox Grid.Row="1" Grid.Column="1" Width="80" Margin="0,0,0,8"
+                                         Text="{Binding PlaytimeOffsetInput, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Grid.Row="2" Grid.Column="1" Content="{local:Tr time.apply}" HorizontalAlignment="Stretch"
+                                        Command="{Binding ApplyPlaytimeCommand}" />
+                            </Grid>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="4">
+                            <TextBlock Text="{local:Tr time.sampleTitle}" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                            <TextBlock Text="{local:Tr time.sampleHint}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,10" />
+                            <DockPanel Margin="0,0,0,8" Visibility="{Binding HasApiKey, Converter={StaticResource InverseVis}}">
+                                <Button DockPanel.Dock="Right" Content="{local:Tr settings.title}" Margin="8,0,0,0" Click="OnOpenSettings" />
+                                <TextBlock Text="{local:Tr time.needKey}" VerticalAlignment="Center" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource SystemFillColorCautionBrush}" />
+                            </DockPanel>
+                            <Button Content="{local:Tr time.collect}" HorizontalAlignment="Left" Margin="0,0,0,8" Padding="12,5" Command="{Binding CollectSampleCommand}" />
+                            <TextBlock Text="{Binding SampleText}" Style="{StaticResource Caption}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Row="2" Style="{StaticResource Card}" Padding="14,10" Margin="0,12,0,0" AutomationProperties.AutomationId="SessionSummary"
                     Visibility="{Binding HasSession, Converter={StaticResource BoolToVis}}">
                 <DockPanel>
                     <Button DockPanel.Dock="Right" VerticalAlignment="Top" Padding="8,5" Margin="12,0,0,0" Command="{Binding CloseSessionCommand}"
@@ -565,7 +672,7 @@
                 </DockPanel>
             </Border>
 
-            <WrapPanel Grid.Row="2" Margin="0,12,0,4" Visibility="{Binding HasGame, Converter={StaticResource BoolToVis}}">
+            <WrapPanel Grid.Row="3" Margin="0,12,0,4" Visibility="{Binding HasGame, Converter={StaticResource BoolToVis}}">
                 <Button Margin="0,0,8,8" Padding="12,6" Command="{Binding RefreshStateCommand}" Style="{DynamicResource AccentButtonStyle}"
                         ToolTip="{local:Tr toolbar.refreshTip}">
                     <StackPanel Orientation="Horizontal">
@@ -628,86 +735,98 @@
                 </Button>
             </WrapPanel>
 
-            <TabControl Grid.Row="3" Visibility="{Binding HasGame, Converter={StaticResource BoolToVis}}">
-                <TabItem Header="{local:Tr tabs.achievements}" AutomationProperties.AutomationId="AchievementsTab">
-                    <DockPanel Margin="0,10,0,0">
-                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4" LastChildFill="False">
-                            <Grid Width="260" Margin="0,0,12,8">
-                                <TextBox x:Name="SearchBox" Padding="32,5,6,6"
-                                         Text="{Binding Search, UpdateSourceTrigger=PropertyChanged, Delay=250}" />
-                                <TextBlock Text="&#xE721;" Style="{StaticResource Glyph}" Margin="11,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False"
-                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
-                                <TextBlock Text="{local:Tr list.search}" Margin="33,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"
-                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                                           Visibility="{Binding Text, ElementName=SearchBox, Converter={StaticResource EmptyToCollapsed}, ConverterParameter=invert}" />
-                            </Grid>
-                            <ComboBox Width="140" Margin="0,0,8,8" ToolTip="{local:Tr list.kindTip}" ItemsSource="{x:Static local:Options.KindFilters}" DisplayMemberPath="Title"
-                                      SelectedItem="{Binding KindFilter}" />
-                            <ComboBox Width="190" Margin="0,0,4,8" ToolTip="{local:Tr list.sortTip}" ItemsSource="{x:Static local:Options.Sorts}" DisplayMemberPath="Title" AutomationProperties.AutomationId="SortBox"
-                                      SelectedItem="{Binding SelectedSort}" />
-                            <ToggleButton Margin="0,0,8,8" Padding="9,7" IsChecked="{Binding Descending}" ToolTip="{local:Tr list.reverseTip}">
-                                <TextBlock Text="&#xE8CB;" Style="{StaticResource Glyph}" />
-                            </ToggleButton>
-                            <ComboBox Width="160" Margin="0,0,8,8" ItemsSource="{x:Static local:Options.Percentiles}" DisplayMemberPath="Title" SelectedItem="{Binding SelectedPercentile}"
-                                      ToolTip="{local:Tr list.percentileTip}" />
-                            <ComboBox Width="150" Margin="0,0,0,8" ItemsSource="{x:Static local:Options.HourModes}" DisplayMemberPath="Title" SelectedItem="{Binding SelectedHours}"
-                                      ToolTip="{local:Tr list.hoursTip}" AutomationProperties.AutomationId="HoursBox" />
-                        </DockPanel>
+            <DockPanel Grid.Row="4" Margin="0,6,0,0" Visibility="{Binding HasGame, Converter={StaticResource BoolToVis}}">
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4" LastChildFill="False">
+                    <Grid Width="260" Margin="0,0,12,8">
+                        <TextBox x:Name="SearchBox" Padding="32,5,6,6"
+                                 Text="{Binding Search, UpdateSourceTrigger=PropertyChanged, Delay=250}" />
+                        <TextBlock Text="&#xE721;" Style="{StaticResource Glyph}" Margin="11,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False"
+                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                        <TextBlock Text="{local:Tr list.search}" Margin="33,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"
+                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                   Visibility="{Binding Text, ElementName=SearchBox, Converter={StaticResource EmptyToCollapsed}, ConverterParameter=invert}" />
+                    </Grid>
+                    <ComboBox Width="140" Margin="0,0,8,8" ToolTip="{local:Tr list.kindTip}" ItemsSource="{x:Static local:Options.KindFilters}" DisplayMemberPath="Title"
+                              SelectedItem="{Binding KindFilter}" />
+                    <ComboBox Width="190" Margin="0,0,4,8" ToolTip="{local:Tr list.sortTip}" ItemsSource="{x:Static local:Options.Sorts}" DisplayMemberPath="Title" AutomationProperties.AutomationId="SortBox"
+                              SelectedItem="{Binding SelectedSort}" />
+                    <ToggleButton Margin="0,0,8,8" Padding="9,7" IsChecked="{Binding Descending}" ToolTip="{local:Tr list.reverseTip}">
+                        <TextBlock Text="&#xE8CB;" Style="{StaticResource Glyph}" />
+                    </ToggleButton>
+                    <ComboBox Width="160" Margin="0,0,8,8" ItemsSource="{x:Static local:Options.Percentiles}" DisplayMemberPath="Title" SelectedItem="{Binding SelectedPercentile}"
+                              ToolTip="{local:Tr list.percentileTip}" />
+                    <ComboBox Width="150" Margin="0,0,0,8" ItemsSource="{x:Static local:Options.HourModes}" DisplayMemberPath="Title" SelectedItem="{Binding SelectedHours}"
+                              ToolTip="{local:Tr list.hoursTip}" AutomationProperties.AutomationId="HoursBox" />
+                </DockPanel>
 
-                        <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-                            <RadioButton Style="{StaticResource FilterChip}"
-                                         IsChecked="{Binding Status, Converter={StaticResource EnumEquals}, ConverterParameter={x:Static core:StatusFilter.All}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{local:Tr list.all}" />
-                                    <TextBlock Text="{Binding CountAll}" Margin="6,0,0,0" Opacity="0.7" />
-                                </StackPanel>
-                            </RadioButton>
-                            <RadioButton Style="{StaticResource FilterChip}"
-                                         IsChecked="{Binding Status, Converter={StaticResource EnumEquals}, ConverterParameter={x:Static core:StatusFilter.Open}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{local:Tr list.open}" />
-                                    <TextBlock Text="{Binding CountOpen}" Margin="6,0,0,0" Opacity="0.7" />
-                                </StackPanel>
-                            </RadioButton>
-                            <RadioButton Style="{StaticResource FilterChip}"
-                                         IsChecked="{Binding Status, Converter={StaticResource EnumEquals}, ConverterParameter={x:Static core:StatusFilter.Done}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{local:Tr list.done}" />
-                                    <TextBlock Text="{Binding CountDone}" Margin="6,0,0,0" Opacity="0.7" />
-                                </StackPanel>
-                            </RadioButton>
-                            <RadioButton Style="{StaticResource FilterChip}" ToolTip="{local:Tr list.notCountedTip}"
-                                         Visibility="{Binding ManualUnlocks, Converter={StaticResource BoolToVis}}"
-                                         IsChecked="{Binding Status, Converter={StaticResource EnumEquals}, ConverterParameter={x:Static core:StatusFilter.NotCounted}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{local:Tr list.notCounted}" />
-                                    <TextBlock Text="{Binding CountNotCounted}" Margin="6,0,0,0" Opacity="0.7" />
-                                </StackPanel>
-                            </RadioButton>
-                            <Border Width="1" Margin="6,4,12,12" Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
-                            <ToggleButton Style="{StaticResource FilterChip}" IsChecked="{Binding OnlyHidden}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE72E;" Style="{StaticResource Glyph}" FontSize="12" Margin="0,0,6,0" />
-                                    <TextBlock Text="{local:Tr list.hidden}" />
-                                </StackPanel>
-                            </ToggleButton>
-                        </WrapPanel>
+                <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                    <RadioButton Style="{StaticResource FilterChip}"
+                                 IsChecked="{Binding Status, Converter={StaticResource EnumEquals}, ConverterParameter={x:Static core:StatusFilter.All}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{local:Tr list.all}" />
+                            <TextBlock Text="{Binding CountAll}" Margin="6,0,0,0" Opacity="0.7" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Style="{StaticResource FilterChip}"
+                                 IsChecked="{Binding Status, Converter={StaticResource EnumEquals}, ConverterParameter={x:Static core:StatusFilter.Open}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{local:Tr list.open}" />
+                            <TextBlock Text="{Binding CountOpen}" Margin="6,0,0,0" Opacity="0.7" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Style="{StaticResource FilterChip}"
+                                 IsChecked="{Binding Status, Converter={StaticResource EnumEquals}, ConverterParameter={x:Static core:StatusFilter.Done}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{local:Tr list.done}" />
+                            <TextBlock Text="{Binding CountDone}" Margin="6,0,0,0" Opacity="0.7" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Style="{StaticResource FilterChip}" ToolTip="{local:Tr list.notCountedTip}"
+                                 Visibility="{Binding ManualUnlocks, Converter={StaticResource BoolToVis}}"
+                                 IsChecked="{Binding Status, Converter={StaticResource EnumEquals}, ConverterParameter={x:Static core:StatusFilter.NotCounted}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{local:Tr list.notCounted}" />
+                            <TextBlock Text="{Binding CountNotCounted}" Margin="6,0,0,0" Opacity="0.7" />
+                        </StackPanel>
+                    </RadioButton>
+                    <Border Width="1" Margin="6,4,12,12" Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
+                    <ToggleButton Style="{StaticResource FilterChip}" IsChecked="{Binding OnlyHidden}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE72E;" Style="{StaticResource Glyph}" FontSize="12" Margin="0,0,6,0" />
+                            <TextBlock Text="{local:Tr list.hidden}" />
+                        </StackPanel>
+                    </ToggleButton>
+                </WrapPanel>
 
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="340" />
+                    </Grid.ColumnDefinitions>
+
+                    <DockPanel>
+                        <local:UnlockChart DockPanel.Dock="Top" Height="170" Margin="0,0,6,10" AutomationProperties.AutomationId="UnlockChart"
+                                           Visibility="{Binding ShowsHistory, Converter={StaticResource BoolToVis}}"
+                                           Days="{Binding HistoryDays}" Total="{Binding CountAll}"
+                                           Stroke="{DynamicResource AccentFillColorDefaultBrush}"
+                                           GridBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+                                           TextBrush="{DynamicResource TextFillColorSecondaryBrush}"
+                                           LabelBrush="{DynamicResource TextFillColorPrimaryBrush}"
+                                           SurfaceBrush="{DynamicResource ApplicationBackgroundBrush}" />
                         <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="12" />
-                                <ColumnDefinition Width="340" />
-                            </Grid.ColumnDefinitions>
-
                             <ListBox x:Name="AchievementList" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}"
                                      ItemTemplate="{StaticResource AchievementCard}" ItemContainerStyle="{StaticResource CardItem}"
                                      ContextMenuOpening="OnAchievementMenuOpening"
                                      SelectionMode="Extended" HorizontalContentAlignment="Stretch"
                                      Background="Transparent" BorderThickness="0" Padding="0"
                                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
-                                     VirtualizingPanel.ScrollUnit="Pixel"
+                                     VirtualizingPanel.ScrollUnit="Pixel" VirtualizingPanel.IsVirtualizingWhenGrouping="True"
                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.GroupStyle>
+                                    <GroupStyle HeaderTemplate="{StaticResource SectionHeading}" ContainerStyle="{StaticResource ListGroup}" />
+                                    <GroupStyle HeaderTemplate="{StaticResource SubsectionHeading}" ContainerStyle="{StaticResource ListGroup}" />
+                                </ListBox.GroupStyle>
                                 <ListBox.ContextMenu>
                                     <ContextMenu>
                                         <MenuItem Header="{local:Tr list.menuWrite}"
@@ -731,290 +850,153 @@
                                     </Binding>
                                 </TextBlock.Visibility>
                             </TextBlock>
-
-                            <Border Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Stretch">
-                                <Grid>
-                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
-                                                Visibility="{Binding HasSelectedRow, Converter={StaticResource InverseVis}}">
-                                        <TextBlock Text="&#xE946;" Style="{StaticResource Glyph}" FontSize="32" HorizontalAlignment="Center"
-                                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
-                                        <TextBlock Text="{local:Tr details.empty}"
-                                                   Style="{StaticResource Caption}" TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,0" />
-                                    </StackPanel>
-
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto" DataContext="{Binding SelectedRow}"
-                                                  Visibility="{Binding DataContext.HasSelectedRow, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
-                                        <StackPanel>
-                                            <Border Width="64" Height="64" CornerRadius="8" HorizontalAlignment="Left"
-                                                    Background="{DynamicResource SubtleFillColorSecondaryBrush}">
-                                                <Border CornerRadius="8" local:RemoteImage.DecodeWidth="128" local:RemoteImage.Url="{Binding Icon}" />
-                                            </Border>
-                                            <TextBlock Text="{Binding Name}" Style="{StaticResource Subtitle}" TextWrapping="Wrap" Margin="0,10,0,4" />
-                                            <Grid Visibility="{Binding Description, Converter={StaticResource EmptyToCollapsed}}">
-                                                <TextBlock Text="{Binding Description}" Style="{StaticResource SpoilerText}" />
-                                                <Button Style="{StaticResource RevealButton}" Command="{Binding RevealCommand}"
-                                                        Visibility="{Binding IsSpoilerHidden, Converter={StaticResource BoolToVis}}" />
-                                            </Grid>
-
-                                            <Grid Margin="0,14,0,0">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="110" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <Grid.RowDefinitions>
-                                                    <RowDefinition Height="Auto" />
-                                                    <RowDefinition Height="Auto" />
-                                                    <RowDefinition Height="Auto" />
-                                                    <RowDefinition Height="Auto" />
-                                                </Grid.RowDefinitions>
-                                                <TextBlock Grid.Row="0" Text="{local:Tr details.percent}" Style="{StaticResource Caption}" Margin="0,0,0,6" />
-                                                <TextBlock Grid.Row="0" Grid.Column="1" Margin="0,0,0,6">
-                                                    <Run Text="{Binding Percent, Mode=OneWay}" FontWeight="SemiBold" />
-                                                    <Run Text="{Binding RarityText, Mode=OneWay}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                                                </TextBlock>
-                                                <TextBlock Grid.Row="1" Text="{local:Tr details.estimate}" Style="{StaticResource Caption}" Margin="0,0,0,6" />
-                                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding EstimateBoth}" Margin="0,0,0,6" TextWrapping="Wrap" ToolTip="{Binding EstimateHint}" />
-                                                <TextBlock Grid.Row="2" Text="{local:Tr details.status}" Style="{StaticResource Caption}" Margin="0,0,0,6"
-                                                           Visibility="{Binding StatusText, Converter={StaticResource EmptyToCollapsed}}" />
-                                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding StatusText}" Margin="0,0,0,6"
-                                                           Visibility="{Binding StatusText, Converter={StaticResource EmptyToCollapsed}}" />
-                                                <TextBlock Grid.Row="3" Text="{local:Tr details.apiName}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
-                                                <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding ApiName, Mode=OneWay}" IsReadOnly="True" />
-                                            </Grid>
-
-                                            <TextBlock Text="{local:Tr details.guides}" Style="{StaticResource Header}" Margin="0,16,0,6" />
-                                            <StackPanel Margin="0,0,0,8" Visibility="{Binding HasGuideTip, Converter={StaticResource BoolToVis}}">
-                                                <Grid Margin="0,0,0,4">
-                                                    <StackPanel>
-                                                        <TextBlock Text="{Binding GuideText}" Style="{StaticResource SpoilerTip}"
-                                                                   Visibility="{Binding GuideText, Converter={StaticResource EmptyToCollapsed}}" />
-                                                        <ItemsControl ItemsSource="{Binding GuidePictures}" Style="{StaticResource SpoilerPictures}" Focusable="False">
-                                                            <ItemsControl.ItemsPanel>
-                                                                <ItemsPanelTemplate>
-                                                                    <WrapPanel />
-                                                                </ItemsPanelTemplate>
-                                                            </ItemsControl.ItemsPanel>
-                                                            <ItemsControl.ItemTemplate>
-                                                                <DataTemplate>
-                                                                    <Button Style="{StaticResource PictureThumb}" Click="OnOpenPicture" ToolTip="{local:Tr details.pictureTip}" AutomationProperties.AutomationId="GuidePicture"
-                                                                            Visibility="{Binding IsShown, Converter={StaticResource BoolToVis}}">
-                                                                        <Border Width="142" Height="80" CornerRadius="4">
-                                                                            <Border.Background>
-                                                                                <ImageBrush ImageSource="{Binding Thumbnail}" Stretch="UniformToFill" />
-                                                                            </Border.Background>
-                                                                        </Border>
-                                                                    </Button>
-                                                                </DataTemplate>
-                                                            </ItemsControl.ItemTemplate>
-                                                        </ItemsControl>
-                                                    </StackPanel>
-                                                    <!-- Over the pictures too: a hidden one's pictures are spoilers as well. -->
-                                                    <Button Style="{StaticResource RevealButton}" Command="{Binding RevealCommand}" VerticalContentAlignment="Top"
-                                                            Visibility="{Binding IsTipHidden, Converter={StaticResource BoolToVis}}" />
-                                                </Grid>
-                                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,4"
-                                                           Visibility="{Binding CanTranslate, Converter={StaticResource BoolToVis}}">
-                                                    <Hyperlink Command="{Binding DataContext.TranslateTipCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                               CommandParameter="{Binding}" ToolTip="{local:Tr details.translateTip}">
-                                                        <Run Text="{Binding TranslateLabel, Mode=OneWay}" />
-                                                    </Hyperlink>
-                                                </TextBlock>
-                                                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap">
-                                                    <Hyperlink Command="{Binding DataContext.OpenGuideTipCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                               CommandParameter="{Binding}">
-                                                        <Run Text="{Binding GuideSource, Mode=OneWay}" />
-                                                    </Hyperlink>
-                                                </TextBlock>
-                                            </StackPanel>
-
-                                            <WrapPanel>
-                                                <Button Content="{local:Tr details.guideSteam}" Margin="0,0,8,8" Padding="10,4"
-                                                        Command="{Binding DataContext.OpenGuideCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="steam" />
-                                                <Button Content="{local:Tr details.guideDiscussions}" Margin="0,0,8,8" Padding="10,4"
-                                                        Command="{Binding DataContext.OpenGuideCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="discussions" />
-                                                <Button Content="YouTube" Margin="0,0,8,8" Padding="10,4"
-                                                        Command="{Binding DataContext.OpenGuideCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="youtube" />
-                                                <Button Content="Google" Margin="0,0,8,8" Padding="10,4"
-                                                        Command="{Binding DataContext.OpenGuideCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="google" />
-                                            </WrapPanel>
-
-                                            <TextBlock Text="{local:Tr details.kind}" Style="{StaticResource Caption}" Margin="0,16,0,2" />
-                                            <ComboBox ItemsSource="{x:Static local:Options.Kinds}" DisplayMemberPath="Title" SelectedValuePath="Value"
-                                                      SelectedValue="{Binding Kind, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Stretch" />
-
-                                            <TextBlock Text="{local:Tr details.group}" Style="{StaticResource Caption}" Margin="0,10,0,2" />
-                                            <TextBox Text="{Binding Group, UpdateSourceTrigger=LostFocus}" />
-                                            <TextBlock Text="{local:Tr details.groupAuto}" Style="{StaticResource Caption}" Margin="0,2,0,0"
-                                                       Visibility="{Binding GroupIsAuto, Converter={StaticResource BoolToVis}}" />
-
-                                            <TextBlock Text="{local:Tr details.ownEstimate}" Style="{StaticResource Caption}" Margin="0,10,0,2" />
-                                            <TextBox Text="{Binding EstimateInput, UpdateSourceTrigger=LostFocus}" />
-
-                                            <TextBlock Text="{local:Tr details.note}" Style="{StaticResource Caption}" Margin="0,10,0,2" />
-                                            <TextBox Text="{Binding Note, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" />
-
-                                            <StackPanel Visibility="{Binding DataContext.ManualUnlocks, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
-                                                <CheckBox Content="{local:Tr details.done}" Margin="0,12,0,8"
-                                                          IsChecked="{Binding ManualDone, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                          Visibility="{Binding IsUnlocked, Converter={StaticResource InverseVis}}" />
-                                                <WrapPanel>
-                                                    <Button Content="{local:Tr details.write}" Margin="0,0,8,8" Padding="12,5"
-                                                            Command="{Binding DataContext.UnlockInSteamCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                            CommandParameter="{Binding}"
-                                                            Visibility="{Binding CanWriteToSteam, Converter={StaticResource BoolToVis}}" />
-                                                    <Button Content="{local:Tr details.revert}" Margin="0,0,8,8" Padding="12,5"
-                                                            Command="{Binding DataContext.RevertCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                            CommandParameter="{Binding}"
-                                                            Visibility="{Binding IsUnlocked, Converter={StaticResource BoolToVis}}" />
-                                                </WrapPanel>
-                                            </StackPanel>
-                                        </StackPanel>
-                                    </ScrollViewer>
-                                </Grid>
-                            </Border>
                         </Grid>
                     </DockPanel>
-                </TabItem>
 
-                <TabItem Header="{local:Tr tabs.plan}" AutomationProperties.AutomationId="PlanTab">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
-                        <StackPanel MaxWidth="980" HorizontalAlignment="Left">
-                            <TextBlock Text="{Binding RemainingText}" Style="{StaticResource Subtitle}" TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding PlanHint}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,12" />
-                            <ItemsControl ItemsSource="{Binding PlanSections}" Focusable="False">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Margin="0,0,0,12">
-                                            <TextBlock Text="{Binding Title}" Style="{StaticResource Header}" />
-                                            <ItemsControl ItemsSource="{Binding Groups}" Focusable="False">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,0,8">
-                                                            <StackPanel>
-                                                                <DockPanel Margin="0,0,0,4">
-                                                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Longest}" Style="{StaticResource Caption}" />
-                                                                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold"
-                                                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
-                                                                </DockPanel>
-                                                                <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PlanItem}" Focusable="False" />
-                                                            </StackPanel>
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </ScrollViewer>
-                </TabItem>
+                    <Border Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Stretch">
+                        <Grid>
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                                        Visibility="{Binding HasSelectedRow, Converter={StaticResource InverseVis}}">
+                                <TextBlock Text="&#xE946;" Style="{StaticResource Glyph}" FontSize="32" HorizontalAlignment="Center"
+                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                                <TextBlock Text="{local:Tr details.empty}"
+                                           Style="{StaticResource Caption}" TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,0" />
+                            </StackPanel>
 
-                <TabItem Header="{local:Tr tabs.time}" AutomationProperties.AutomationId="TimeTab">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
-                        <StackPanel MaxWidth="760" HorizontalAlignment="Left">
-                            <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" DataContext="{Binding SelectedRow}"
+                                          Visibility="{Binding DataContext.HasSelectedRow, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                                 <StackPanel>
-                                    <TextBlock Text="{local:Tr time.sampleTitle}" Style="{StaticResource Subtitle}" />
-                                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,10"
-                                               Text="{local:Tr time.sampleHint}" />
-                                    <DockPanel Margin="0,0,0,10" Visibility="{Binding HasApiKey, Converter={StaticResource InverseVis}}">
-                                        <Button DockPanel.Dock="Right" Content="{local:Tr settings.title}" Margin="8,0,0,0" Click="OnOpenSettings" />
-                                        <TextBlock Text="{local:Tr time.needKey}" VerticalAlignment="Center" TextWrapping="Wrap"
-                                                   Foreground="{DynamicResource SystemFillColorCautionBrush}" />
-                                    </DockPanel>
-                                    <WrapPanel>
-                                        <Button Content="{local:Tr time.collect}" Margin="0,0,8,8" Padding="12,5" Command="{Binding CollectSampleCommand}" />
-                                    </WrapPanel>
-                                    <TextBlock Text="{Binding SampleText}" Style="{StaticResource Caption}" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Border>
+                                    <Border Width="64" Height="64" CornerRadius="8" HorizontalAlignment="Left"
+                                            Background="{DynamicResource SubtleFillColorSecondaryBrush}">
+                                        <Border CornerRadius="8" local:RemoteImage.DecodeWidth="128" local:RemoteImage.Url="{Binding Icon}" />
+                                    </Border>
+                                    <TextBlock Text="{Binding Name}" Style="{StaticResource Subtitle}" TextWrapping="Wrap" Margin="0,10,0,4" />
+                                    <Grid Visibility="{Binding Description, Converter={StaticResource EmptyToCollapsed}}">
+                                        <TextBlock Text="{Binding Description}" Style="{StaticResource SpoilerText}" />
+                                        <Button Style="{StaticResource RevealButton}" Command="{Binding RevealCommand}"
+                                                Visibility="{Binding IsSpoilerHidden, Converter={StaticResource BoolToVis}}" />
+                                    </Grid>
 
-                            <Border Style="{StaticResource Card}" Margin="0,0,0,12">
-                                <StackPanel>
-                                    <TextBlock Text="{local:Tr time.completionTitle}" Style="{StaticResource Subtitle}" />
-                                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,10"
-                                               Text="{local:Tr time.completionHint}" />
-                                    <WrapPanel>
-                                        <TextBox Width="90" Text="{Binding CompletionInput, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,8" />
-                                        <TextBlock Text="{local:Tr time.hours}" VerticalAlignment="Center" Margin="0,0,16,8" Style="{StaticResource Muted}" />
-                                        <Button Content="{local:Tr time.apply}" Margin="0,0,8,8" Command="{Binding ApplyCompletionCommand}" />
-                                        <Button Content="{local:Tr time.fetch}" Margin="0,0,8,8" Command="{Binding FetchCompletionCommand}" />
-                                    </WrapPanel>
-                                    <TextBlock Text="{Binding CompletionText}" Style="{StaticResource Caption}" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource Card}">
-                                <StackPanel>
-                                    <TextBlock Text="{local:Tr time.playtimeTitle}" Style="{StaticResource Subtitle}" />
-                                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,10"
-                                               Text="{local:Tr time.playtimeHint}" />
-                                    <Grid>
+                                    <Grid Margin="0,14,0,0">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="220" />
-                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
-                                        <TextBlock Grid.Row="0" Text="{local:Tr time.override}" VerticalAlignment="Center" Margin="0,0,0,8"
-                                                   ToolTip="{local:Tr time.overrideTip}" />
-                                        <TextBox Grid.Row="0" Grid.Column="1" Width="90" Margin="0,0,0,8"
-                                                 Text="{Binding PlaytimeOverrideInput, UpdateSourceTrigger=PropertyChanged}" />
-                                        <TextBlock Grid.Row="1" Text="{local:Tr time.offset}" VerticalAlignment="Center" Margin="0,0,0,8"
-                                                   ToolTip="{local:Tr time.offsetTip}" />
-                                        <TextBox Grid.Row="1" Grid.Column="1" Width="90" Margin="0,0,0,8"
-                                                 Text="{Binding PlaytimeOffsetInput, UpdateSourceTrigger=PropertyChanged}" />
-                                        <Button Grid.Row="2" Grid.Column="1" Content="{local:Tr time.apply}" HorizontalAlignment="Left"
-                                                Command="{Binding ApplyPlaytimeCommand}" />
+                                        <TextBlock Grid.Row="0" Text="{local:Tr details.percent}" Style="{StaticResource Caption}" Margin="0,0,0,6" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Margin="0,0,0,6">
+                                            <Run Text="{Binding Percent, Mode=OneWay}" FontWeight="SemiBold" />
+                                            <Run Text="{Binding RarityText, Mode=OneWay}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                        </TextBlock>
+                                        <TextBlock Grid.Row="1" Text="{local:Tr details.estimate}" Style="{StaticResource Caption}" Margin="0,0,0,6" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding EstimateBoth}" Margin="0,0,0,6" TextWrapping="Wrap" ToolTip="{Binding EstimateHint}" />
+                                        <TextBlock Grid.Row="2" Text="{local:Tr details.status}" Style="{StaticResource Caption}" Margin="0,0,0,6"
+                                                   Visibility="{Binding StatusText, Converter={StaticResource EmptyToCollapsed}}" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding StatusText}" Margin="0,0,0,6"
+                                                   Visibility="{Binding StatusText, Converter={StaticResource EmptyToCollapsed}}" />
+                                        <TextBlock Grid.Row="3" Text="{local:Tr details.apiName}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                                        <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding ApiName, Mode=OneWay}" IsReadOnly="True" />
                                     </Grid>
+
+                                    <TextBlock Text="{local:Tr details.guides}" Style="{StaticResource Header}" Margin="0,16,0,6" />
+                                    <StackPanel Margin="0,0,0,8" Visibility="{Binding HasGuideTip, Converter={StaticResource BoolToVis}}">
+                                        <Grid Margin="0,0,0,4">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding GuideText}" Style="{StaticResource SpoilerTip}"
+                                                           Visibility="{Binding GuideText, Converter={StaticResource EmptyToCollapsed}}" />
+                                                <ItemsControl ItemsSource="{Binding GuidePictures}" Style="{StaticResource SpoilerPictures}" Focusable="False">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <WrapPanel />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button Style="{StaticResource PictureThumb}" Click="OnOpenPicture" ToolTip="{local:Tr details.pictureTip}" AutomationProperties.AutomationId="GuidePicture"
+                                                                    Visibility="{Binding IsShown, Converter={StaticResource BoolToVis}}">
+                                                                <Border Width="142" Height="80" CornerRadius="4">
+                                                                    <Border.Background>
+                                                                        <ImageBrush ImageSource="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                                                    </Border.Background>
+                                                                </Border>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                            <!-- Over the pictures too: a hidden one's pictures are spoilers as well. -->
+                                            <Button Style="{StaticResource RevealButton}" Command="{Binding RevealCommand}" VerticalContentAlignment="Top"
+                                                    Visibility="{Binding IsTipHidden, Converter={StaticResource BoolToVis}}" />
+                                        </Grid>
+                                        <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,4"
+                                                   Visibility="{Binding CanTranslate, Converter={StaticResource BoolToVis}}">
+                                            <Hyperlink Command="{Binding DataContext.TranslateTipCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                       CommandParameter="{Binding}" ToolTip="{local:Tr details.translateTip}">
+                                                <Run Text="{Binding TranslateLabel, Mode=OneWay}" />
+                                            </Hyperlink>
+                                        </TextBlock>
+                                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap">
+                                            <Hyperlink Command="{Binding DataContext.OpenGuideTipCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                       CommandParameter="{Binding}">
+                                                <Run Text="{Binding GuideSource, Mode=OneWay}" />
+                                            </Hyperlink>
+                                        </TextBlock>
+                                    </StackPanel>
+
+                                    <WrapPanel>
+                                        <Button Content="{local:Tr details.guideSteam}" Margin="0,0,8,8" Padding="10,4"
+                                                Command="{Binding DataContext.OpenGuideCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="steam" />
+                                        <Button Content="{local:Tr details.guideDiscussions}" Margin="0,0,8,8" Padding="10,4"
+                                                Command="{Binding DataContext.OpenGuideCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="discussions" />
+                                        <Button Content="YouTube" Margin="0,0,8,8" Padding="10,4"
+                                                Command="{Binding DataContext.OpenGuideCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="youtube" />
+                                        <Button Content="Google" Margin="0,0,8,8" Padding="10,4"
+                                                Command="{Binding DataContext.OpenGuideCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="google" />
+                                    </WrapPanel>
+
+                                    <TextBlock Text="{local:Tr details.kind}" Style="{StaticResource Caption}" Margin="0,16,0,2" />
+                                    <ComboBox ItemsSource="{x:Static local:Options.Kinds}" DisplayMemberPath="Title" SelectedValuePath="Value"
+                                              SelectedValue="{Binding Kind, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Stretch" />
+
+                                    <TextBlock Text="{local:Tr details.group}" Style="{StaticResource Caption}" Margin="0,10,0,2" />
+                                    <TextBox Text="{Binding Group, UpdateSourceTrigger=LostFocus}" />
+                                    <TextBlock Text="{local:Tr details.groupAuto}" Style="{StaticResource Caption}" Margin="0,2,0,0"
+                                               Visibility="{Binding GroupIsAuto, Converter={StaticResource BoolToVis}}" />
+
+                                    <TextBlock Text="{local:Tr details.ownEstimate}" Style="{StaticResource Caption}" Margin="0,10,0,2" />
+                                    <TextBox Text="{Binding EstimateInput, UpdateSourceTrigger=LostFocus}" />
+
+                                    <TextBlock Text="{local:Tr details.note}" Style="{StaticResource Caption}" Margin="0,10,0,2" />
+                                    <TextBox Text="{Binding Note, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" />
+
+                                    <StackPanel Visibility="{Binding DataContext.ManualUnlocks, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
+                                        <CheckBox Content="{local:Tr details.done}" Margin="0,12,0,8"
+                                                  IsChecked="{Binding ManualDone, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  Visibility="{Binding IsUnlocked, Converter={StaticResource InverseVis}}" />
+                                        <WrapPanel>
+                                            <Button Content="{local:Tr details.write}" Margin="0,0,8,8" Padding="12,5"
+                                                    Command="{Binding DataContext.UnlockInSteamCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    Visibility="{Binding CanWriteToSteam, Converter={StaticResource BoolToVis}}" />
+                                            <Button Content="{local:Tr details.revert}" Margin="0,0,8,8" Padding="12,5"
+                                                    Command="{Binding DataContext.RevertCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    Visibility="{Binding IsUnlocked, Converter={StaticResource BoolToVis}}" />
+                                        </WrapPanel>
+                                    </StackPanel>
                                 </StackPanel>
-                            </Border>
-                        </StackPanel>
-                    </ScrollViewer>
-                </TabItem>
-
-                <TabItem Header="{local:Tr tabs.history}" AutomationProperties.AutomationId="HistoryTab">
-                    <Grid Margin="0,10,0,0">
-                        <TextBlock Text="{local:Tr history.empty}" Style="{StaticResource Muted}"
-                                   Visibility="{Binding HasHistory, Converter={StaticResource InverseVis}}" />
-                        <DockPanel MaxWidth="980" HorizontalAlignment="Left" Visibility="{Binding HasHistory, Converter={StaticResource BoolToVis}}">
-                            <local:UnlockChart DockPanel.Dock="Top" Height="230" Margin="0,0,0,16" AutomationProperties.AutomationId="UnlockChart"
-                                               Days="{Binding HistoryDays}" Total="{Binding CountAll}"
-                                               Stroke="{DynamicResource AccentFillColorDefaultBrush}"
-                                               GridBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
-                                               TextBrush="{DynamicResource TextFillColorSecondaryBrush}"
-                                               LabelBrush="{DynamicResource TextFillColorPrimaryBrush}"
-                                               SurfaceBrush="{DynamicResource ApplicationBackgroundBrush}" />
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <ItemsControl ItemsSource="{Binding HistoryRows}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="0,0,0,8">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="150" />
-                                                    <ColumnDefinition Width="44" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Text="{Binding Date}" Style="{StaticResource Muted}" />
-                                                <TextBlock Grid.Column="1" Text="{Binding Count}" FontWeight="SemiBold"
-                                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
-                                                <TextBlock Grid.Column="2" Text="{Binding Names}" TextWrapping="Wrap"
-                                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
                             </ScrollViewer>
-                        </DockPanel>
-                    </Grid>
-                </TabItem>
-            </TabControl>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </DockPanel>
 
-            <DockPanel Grid.Row="4" Margin="0,8,0,0">
+            <DockPanel Grid.Row="5" Margin="0,8,0,0">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="12,0,0,0"
                             Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}">
                     <TextBlock Text="{Binding UpdateText}" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,8,0" />

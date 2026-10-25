@@ -75,7 +75,7 @@ public static class Planner
 {
     /// <summary>
     /// How much slower than the median a player may be for us to still trust their pace.
-    /// Beyond that it is more likely AFK or hours before achievements existed (fixed on the "Time" tab).
+    /// Beyond that it is more likely AFK or hours before achievements existed (corrected in the time panel).
     /// </summary>
     public const double MaxPace = 3;
 

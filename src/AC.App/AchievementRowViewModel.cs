@@ -28,6 +28,12 @@ public sealed class AchievementRowViewModel : ObservableObject
             : "";
     }
 
+    /// <summary>The list heading the row goes under; null - the list is not grouped.</summary>
+    public ListSection? Section { get; init; }
+
+    /// <summary>The heading inside <see cref="Section"/>: the plan group.</summary>
+    public ListSection? Subsection { get; init; }
+
     public string ApiName => _row.ApiName;
     public AchievementDef Def => _row.Def;
     public EffectiveStatus Status => _row.Status;

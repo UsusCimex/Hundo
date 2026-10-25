@@ -23,6 +23,7 @@
 
   "game.unlocked": "Unlocked",
   "game.toComplete": "To 100%",
+  "game.timeTip": "Where the estimate comes from and how to correct it",
   "game.played": "Played",
   "game.progress": "{0} of {1} unlocked in Steam ({2}%)",
   "game.progressManual": ", {0} more done but not counted - {1}% in total",
@@ -30,7 +31,7 @@
   "game.unlockedSubManual": "{0}%, +{1} not counted",
   "game.noEstimate": "no estimate",
   "game.allDone": "all unlocked",
-  "game.setInTime": "set it on the Time tab",
+  "game.setInTime": "click to set it",
   "game.sourceManual": "set manually",
   "game.sourceSite": "from {0}",
   "game.sourceSample": "from the player sample",
@@ -61,10 +62,6 @@
   "menu.tagsSave": "Save to file...",
   "menu.tagsLoad": "Load from file...",
 
-  "tabs.achievements": "Achievements",
-  "tabs.plan": "Plan to 100%",
-  "tabs.time": "Time",
-  "tabs.history": "History",
 
   "list.search": "Name, description, group, note",
   "list.kindTip": "Type",
@@ -147,10 +144,6 @@
   "details.write": "Write to Steam",
   "details.revert": "Revoke in Steam",
 
-  "plan.hint": "Missables first, then story, other and grind; within a stage, by time from the start of the game. Groups are set on the achievement card.",
-  "plan.hintManual": "Missables first, then story, other and grind; within a stage, by time from the start of the game. Groups are set on the achievement card; a checkmark means done but not counted.",
-  "plan.doneTip": "Done (Steam did not count it)",
-  "plan.noGroup": "No group",
   "plan.upTo": "up to {0}",
   "plan.complete": "All achievements unlocked",
   "plan.remaining": "About {0} to 100%",
@@ -160,8 +153,8 @@
     "one": "; {0} achievement has no estimate",
     "other": "; {0} achievements have no estimate"
   },
-  "plan.noPercents": "To 100%: no estimate - Steam did not provide global percentages. Reload the achievement list (More menu) or collect statistics on the Time tab",
-  "plan.noEstimate": "To 100%: no estimate - set the time to 100% on the Time tab, or unlock a couple of achievements and it will appear",
+  "plan.noPercents": "To 100%: no estimate - Steam did not provide global percentages. Reload the achievement list (More menu) or collect statistics below",
+  "plan.noEstimate": "To 100%: no estimate - set the time to 100% below, or unlock a couple of achievements and it will appear",
 
   "session.title": "Session: {0}",
   "session.unlocked": {
@@ -173,7 +166,6 @@
   "session.leftNow": "To 100%: {0}",
   "session.close": "Dismiss",
 
-  "history.empty": "Nothing unlocked yet",
   "history.date": "MMMM d, yyyy",
   "history.axisDay": "MMM d",
   "history.axisMonth": "MMM yyyy",
@@ -210,6 +202,7 @@
   "time.overrideTip": "Your own value instead of Steam's playtime. Empty - use Steam",
   "time.offset": "Ignore from Steam, h",
   "time.offsetTip": "Hours before achievements existed, or AFK - subtracted from Steam's playtime",
+  "time.close": "Hide",
 
   "overlay.title": "Hundo - overlay",
   "overlay.doneTip": "Mark as done but not counted by Steam",
