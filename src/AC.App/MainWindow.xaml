@@ -611,7 +611,7 @@
                             </Grid>
                             <ComboBox Width="140" Margin="0,0,8,8" ToolTip="{local:Tr list.kindTip}" ItemsSource="{x:Static local:Options.KindFilters}" DisplayMemberPath="Title"
                                       SelectedItem="{Binding KindFilter}" />
-                            <ComboBox Width="190" Margin="0,0,4,8" ToolTip="{local:Tr list.sortTip}" ItemsSource="{x:Static local:Options.Sorts}" DisplayMemberPath="Title"
+                            <ComboBox Width="190" Margin="0,0,4,8" ToolTip="{local:Tr list.sortTip}" ItemsSource="{x:Static local:Options.Sorts}" DisplayMemberPath="Title" AutomationProperties.AutomationId="SortBox"
                                       SelectedItem="{Binding SelectedSort}" />
                             <ToggleButton Margin="0,0,8,8" Padding="9,7" IsChecked="{Binding Descending}" ToolTip="{local:Tr list.reverseTip}">
                                 <TextBlock Text="&#xE8CB;" Style="{StaticResource Glyph}" />

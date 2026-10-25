@@ -89,8 +89,14 @@ public sealed class AchievementQuery
                 list = list.OrderBy(r => r.Def.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
                 break;
             case SortMode.UnlockTime:
+                // Unlocked ones newest first, then the locked ones in the order they are expected to come.
                 list = list.OrderBy(r => r.UnlockTime is null)
                            .ThenByDescending(r => r.UnlockTime)
+                           .ThenBy(r => TimeLeft is null || !TimeLeft.ContainsKey(r.ApiName))
+                           .ThenBy(r => TimeLeft?.GetValueOrDefault(r.ApiName))
+                           .ThenBy(r => r.EstimateMinutes is null)
+                           .ThenBy(r => r.EstimateMinutes)
+                           .ThenByDescending(r => r.Def.Percent ?? -1)
                            .ToList();
                 break;
         }

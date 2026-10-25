@@ -365,6 +365,22 @@ static class Tests
         Assert.Equal("misc,miss,grind,ch1,ch5", string.Join(",", q.Apply(g, Percentile.P50).Select(r => r.ApiName)));
     }
 
+    public static void Query_SortsByUnlockDate()
+    {
+        var g = SampleGame();
+        var now = DateTimeOffset.Now;
+        g.StateOf("ch5").SteamUnlocked = true;
+        g.StateOf("ch5").SteamUnlockTime = now.AddDays(-1);
+        g.StateOf("grind").SteamUnlocked = true;
+        g.StateOf("grind").SteamUnlockTime = now.AddHours(-1);
+        // Unlocked ones newest first, then the locked ones as they are expected to come, not in the schema order.
+        var q = new AchievementQuery { Sort = SortMode.UnlockTime };
+        Assert.Equal("grind,ch5,ch1,misc,miss", string.Join(",", q.Apply(g, Percentile.P50).Select(r => r.ApiName)));
+        q.Status = StatusFilter.Open;
+        q.TimeLeft = new Dictionary<string, double> { ["miss"] = 5, ["misc"] = 50 };
+        Assert.Equal("miss,misc,ch1", string.Join(",", q.Apply(g, Percentile.P50).Select(r => r.ApiName)));
+    }
+
     public static void Export_CsvHasBomAndEscapes()
     {
         var g = SampleGame();
