@@ -219,7 +219,7 @@ public sealed class AchievementRowViewModel : ObservableObject
     public string StatusText => _row.Status switch
     {
         EffectiveStatus.Unlocked => _row.UnlockTime is { } t
-            ? Loc.T("card.unlockedAt", t.ToLocalTime().ToString("d", CultureInfo.CurrentCulture))
+            ? Loc.T("card.unlockedAt", t.ToLocalTime().ToString("g", CultureInfo.GetCultureInfo(Loc.Language)))
             : Loc.T("card.unlocked"),
         EffectiveStatus.ManualDone => Loc.T("card.manualDone"),
         _ => "",
