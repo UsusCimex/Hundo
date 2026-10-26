@@ -161,7 +161,7 @@ public sealed class UnlockLogEntry
 public sealed record GameSummary
 {
     /// <summary>Summaries of an older format lack fields or count differently and are rebuilt from the game files.</summary>
-    public const int CurrentFormat = 3;
+    public const int CurrentFormat = 4;
 
     public int Format { get; init; }
     public int Unlocked { get; init; }
