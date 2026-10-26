@@ -1181,22 +1181,30 @@ static class Tests
     public static void Planner_CountDown()
     {
         var g = SampleGame();
+        // The most common one is at the very start: it takes the play and still gets the least margin.
+        var start = Planner.Build(g, Percentile.P50).CountDown(10);
+        Assert.Equal(new Countdown(5, true), start["ch1"]);
+
+        g.StateOf("ch1").SteamUnlocked = true;
         var plan = Planner.Build(g, Percentile.P50);
-        double misc = g.Estimates["misc"].P50!.Value, miscWide = g.Estimates["misc"].P90!.Value;
+        double misc = g.Estimates["misc"].P50!.Value, miscWide = g.Estimates["misc"].P90!.Value, ch5 = g.Estimates["ch5"].P50!.Value;
         Assert.Equal(new Countdown(misc - 50, false), plan.CountDown(50)["misc"]);
+        Assert.True(Math.Abs(plan.CountDown(50)["ch5"].Minutes!.Value - (ch5 - 50)) < 0.01, "the next ones count down with it");
 
         // Past the estimate: more time with the wide margin, then none.
         var late = plan.CountDown(100)["misc"];
         Assert.True(late.Late && Math.Abs(late.Minutes!.Value - (miscWide - 100)) < 0.01, $"late {late}");
         Assert.Equal(new Countdown(null, true), plan.CountDown(miscWide + 1)["misc"]);
 
-        // The most common one is at the very start: it still gets the least margin.
-        Assert.Equal(new Countdown(5, true), plan.CountDown(10)["ch1"]);
+        // Hours without an unlock (AFK in a lobby) go to the nearest one only: the others keep their gap to it.
+        var idle = plan.CountDown(5000);
+        Assert.Equal(1, idle.Values.Count(c => c.Late));
+        Assert.True(!idle["ch5"].Late && Math.Abs(idle["ch5"].Minutes!.Value - (ch5 - misc)) < 0.01, $"ch5 {idle["ch5"]}");
 
-        // The time to 100% is the longest countdown.
-        var total = plan.RemainingAfter(160)!.Value;
-        Assert.True(!total.Late && Math.Abs(total.Minutes!.Value - 440) < 0.01, $"total {total}");
-        Assert.Equal(new Countdown(null, true), plan.RemainingAfter(5000));
+        // The time to 100% is the longest countdown: idle hours take only the way to the nearest one from it.
+        var total = plan.RemainingAfter(50)!.Value;
+        Assert.True(!total.Late && Math.Abs(total.Minutes!.Value - 550) < 0.01, $"total {total}");
+        Assert.True(Math.Abs(plan.RemainingAfter(5000)!.Value.Minutes!.Value - (600 - misc)) < 0.01, "after idle hours");
 
         // With the wide margin chosen, past it there is only the least margin.
         var wide = Planner.Build(g, Percentile.P90).CountDown(miscWide + 5)["misc"];

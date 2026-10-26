@@ -37,14 +37,22 @@ public sealed record Plan(
 
     /// <summary>
     /// Time left to each locked achievement after <paramref name="played"/> minutes of play since the last unlock.
-    /// Past the estimate the player takes longer than it assumes, and the wide margin gives more time; past that too,
-    /// there is no estimate.
+    /// The play goes only to the nearest one: hours without an unlock may be idle (AFK in a lobby), so the others
+    /// keep their gap to it until it is unlocked. Past its estimate the player takes longer than it assumes, and the
+    /// wide margin gives more time; past that too, there is no estimate.
     /// </summary>
     public Dictionary<string, Countdown> CountDown(double played)
     {
         var result = new Dictionary<string, Countdown>(StringComparer.Ordinal);
+        if (TimeLeft.Count == 0) return result;
+        double nearest = TimeLeft.Values.Min(), credited = Math.Min(played, nearest);
         foreach (var (name, left) in TimeLeft)
         {
+            if (left > nearest)
+            {
+                result[name] = new Countdown(left - credited, false);
+                continue;
+            }
             double wide = Math.Max(left + Planner.MinMarginMinutes, WideTimeLeft.GetValueOrDefault(name, left));
             result[name] = played < left ? new Countdown(left - played, false)
                 : new Countdown(played < wide ? wide - played : null, true);
