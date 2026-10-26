@@ -149,8 +149,9 @@ public sealed class AchievementRowViewModel : ObservableObject
             };
             if (_row.EstimateMinutes is null) return source;
             var hint = source + "\n" + EstimateBoth;
-            return Left is not { Late: true } c ? hint
-                : hint + "\n" + Loc.T(c.Minutes.HasValue ? "estimate.lateTip" : IsMissable ? "estimate.missedTip" : "estimate.overdueTip");
+            return Left is not { } c || !c.Late && !c.Passed ? hint
+                : hint + "\n" + Loc.T(c.Passed ? _row.ProbablyMissed ? "estimate.missedTip" : "estimate.passedTip"
+                    : c.Minutes.HasValue ? "estimate.lateTip" : "estimate.overdueTip");
         }
     }
 
@@ -167,14 +168,16 @@ public sealed class AchievementRowViewModel : ObservableObject
 
     private Countdown? Left => _row.IsDone ? null : _owner.CountdownOf(ApiName);
 
-    private bool IsMissable => _row.Kind == AchievementKind.Missable;
-
-    /// <summary>Past the estimate a missable one may have been missed; others just take longer.</summary>
+    /// <summary>
+    /// Past the estimate it just takes longer. Gone past by the order of unlocks, a missable one was probably missed,
+    /// and the others can wait.
+    /// </summary>
     private string LeftText(Countdown c) => c.Minutes is { } m ? Loc.T("estimate.left", TimeEstimator.Format(m))
-        : Loc.T(IsMissable ? "card.missedShort" : "estimate.overdue");
+        : !c.Passed ? Loc.T("estimate.overdue")
+        : Loc.T(_row.ProbablyMissed ? "card.missedShort" : "estimate.passed");
 
-    /// <summary>The hours show the time left and it is past the estimate: counted with the wide margin, or past it too.</summary>
-    public bool IsLate => _owner.ShowTimeLeft && Left?.Late == true;
+    /// <summary>The hours show the time left and it is past the estimate, or it was probably missed.</summary>
+    public bool IsLate => _owner.ShowTimeLeft && Left is { } c && (c.Late || c.Passed && _row.ProbablyMissed);
 
     public string Description =>
         _row.Def.Description.Length > 0 ? _row.Def.Description :

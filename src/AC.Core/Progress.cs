@@ -24,6 +24,26 @@ public static class Progress
     }
 
     /// <summary>
+    /// Locked achievements the player has gone past: they are clearly before a done one on the scale, and two thirds
+    /// of the achievements up to that one are done. A single rare one done early moves nothing.
+    /// </summary>
+    /// <param name="clearly">How far before that point an achievement has to be: nearby ones come about together.</param>
+    public static HashSet<string> Behind(IEnumerable<(string Name, double At, bool Done)> achievements, double clearly)
+    {
+        var points = achievements.GroupBy(a => a.At).OrderBy(g => g.Key).ToList();
+        double reached = double.NegativeInfinity;
+        int seen = 0, done = 0;
+        foreach (var point in points)
+        {
+            seen += point.Count();
+            done += point.Count(a => a.Done);
+            if (point.Any(a => a.Done) && done * 3 >= seen * 2) reached = point.Key;
+        }
+        return points.Where(p => p.Key < reached - clearly).SelectMany(p => p)
+            .Where(a => !a.Done).Select(a => a.Name).ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
     /// Own minutes of play per unit of the scale; on the "minutes from the start" scale of a typical player,
     /// 2 means twice as slow. Playtime between two known moments is matched with the progress made between them,
     /// and the result is the median weighted by progress. Stretches with playtime but no unlock (AFK, idling)

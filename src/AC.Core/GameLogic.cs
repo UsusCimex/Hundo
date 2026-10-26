@@ -47,6 +47,7 @@ public static class GameLogic
     public static IReadOnlyList<AchievementRow> BuildRows(GameData game, Percentile p)
     {
         var missed = ProbablyMissed(game);
+        var behind = Behind(game);
         var rows = new List<AchievementRow>(game.Achievements.Count);
         foreach (var def in game.Achievements)
         {
@@ -54,10 +55,12 @@ public static class GameLogic
             game.Tags.TryGetValue(def.ApiName, out var t);
             var est = EstimateOf(game, def.ApiName, p, out var manual);
             var status = StatusOf(s, game.CountManualMarks);
+            var kind = t?.Kind ?? AchievementKind.Unknown;
+            bool gonePast = behind.Contains(def.ApiName);
             rows.Add(new AchievementRow(
                 def,
                 status,
-                t?.Kind ?? AchievementKind.Unknown,
+                kind,
                 t?.Group ?? "",
                 est,
                 manual,
@@ -69,10 +72,22 @@ public static class GameLogic
                     _ => null,
                 },
                 t is { Group.Length: > 0, GroupIsManual: false },
-                missed.Contains(def.ApiName)));
+                missed.Contains(def.ApiName) || gonePast && kind == AchievementKind.Missable,
+                gonePast));
         }
         return rows;
     }
+
+    /// <summary>
+    /// Locked achievements the player has gone past on the typical player's scale (<see cref="Progress.Behind"/>):
+    /// players usually unlock them before achievements this player already has.
+    /// </summary>
+    public static IReadOnlySet<string> Behind(GameData game) =>
+        AC.Core.Progress.Behind(game.Achievements
+            .Select(a => (a.ApiName, At: EstimateOf(game, a.ApiName, Percentile.P50, out _),
+                Done: StatusOf(game.States.GetValueOrDefault(a.ApiName), game.CountManualMarks) != EffectiveStatus.Locked))
+            .Where(a => a.At.HasValue)
+            .Select(a => (a.ApiName, a.At!.Value, a.Done)), Planner.MinMarginMinutes);
 
     /// <summary>
     /// Locked missable achievements whose part of the game (chapter, act, episode) is behind the player:

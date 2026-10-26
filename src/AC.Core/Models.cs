@@ -208,6 +208,7 @@ public sealed class GameData
 }
 
 /// <summary>List row: schema + state + tags + estimate.</summary>
+/// <param name="Behind">Locked, and the player has gone past it by the order of unlocks (<see cref="GameLogic.Behind"/>).</param>
 public sealed record AchievementRow(
     AchievementDef Def,
     EffectiveStatus Status,
@@ -218,8 +219,12 @@ public sealed record AchievementRow(
     string Note,
     DateTimeOffset? UnlockTime,
     bool GroupIsAuto = false,
-    bool ProbablyMissed = false)
+    bool ProbablyMissed = false,
+    bool Behind = false)
 {
     public string ApiName => Def.ApiName;
     public bool IsDone => Status != EffectiveStatus.Locked;
+
+    /// <summary>Not on the way to the next ones: gone past, or probably missed.</summary>
+    public bool Passed => !IsDone && (Behind || ProbablyMissed);
 }

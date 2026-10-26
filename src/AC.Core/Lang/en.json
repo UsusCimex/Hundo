@@ -115,7 +115,9 @@
   "estimate.overdue": "taking longer",
   "estimate.lateTip": "You are taking longer than a typical player: the time left has a wide margin",
   "estimate.overdueTip": "Longer than even the wide margin: no estimate",
-  "estimate.missedTip": "Longer than even the wide margin: check that it was not missed",
+  "estimate.passed": "later",
+  "estimate.passedTip": "Achievements players usually get after it are already yours: this one can wait",
+  "estimate.missedTip": "Achievements players usually get after it are already yours: this one was probably missed",
 
   "details.empty": "Select an achievement to set its type, group, estimate and note",
   "details.percent": "Players",

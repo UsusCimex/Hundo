@@ -29,21 +29,28 @@ public sealed record Plan(
     /// <summary>Nothing left to unlock.</summary>
     public bool IsComplete => Sections.Count == 0;
 
-    /// <summary>Time left to each locked achievement with an estimate (<see cref="Planner.TimeLeft"/>).</summary>
+    /// <summary>Time left to each locked achievement ahead with an estimate (<see cref="Planner.TimeLeft"/>).</summary>
     public IReadOnlyDictionary<string, double> TimeLeft { get; init; } = new Dictionary<string, double>();
 
     /// <summary>The same with the wide margin (P90): the time a player who takes longer gets.</summary>
     public IReadOnlyDictionary<string, double> WideTimeLeft { get; init; } = new Dictionary<string, double>();
 
+    /// <summary>Locked achievements not on the way to the next ones (<see cref="AchievementRow.Passed"/>).</summary>
+    public IReadOnlySet<string> Passed { get; init; } = new HashSet<string>();
+
+    /// <summary>The stretches of <see cref="Passed"/> ones: left for the end of the way to 100%.</summary>
+    public double Deferred { get; init; }
+
     /// <summary>
     /// Time left to each locked achievement after <paramref name="played"/> minutes of play since the last unlock.
     /// The play goes only to the nearest one: hours without an unlock may be idle (AFK in a lobby), so the others
     /// keep their gap to it until it is unlocked. Past its estimate the player takes longer than it assumes, and the
-    /// wide margin gives more time; past that too, there is no estimate.
+    /// wide margin gives more time; past that too, there is no estimate. Passed ones have no time left to count.
     /// </summary>
     public Dictionary<string, Countdown> CountDown(double played)
     {
         var result = new Dictionary<string, Countdown>(StringComparer.Ordinal);
+        foreach (var name in Passed) result[name] = new Countdown(null, false, true);
         if (TimeLeft.Count == 0) return result;
         double nearest = TimeLeft.Values.Min(), credited = Math.Min(played, nearest);
         foreach (var (name, left) in TimeLeft)
@@ -60,19 +67,22 @@ public sealed record Plan(
         return result;
     }
 
-    /// <summary>The time to 100% after that play: the longest countdown; null - nothing to count.</summary>
+    /// <summary>The time to 100% after that play: the longest countdown and the deferred stretches; null - nothing to count.</summary>
     public Countdown? RemainingAfter(double played)
     {
-        if (TimeLeft.Count == 0) return null;
+        if (TimeLeft.Count == 0) return RemainingMinutes is { } rest ? new Countdown(rest, false) : null;
         var known = CountDown(played).Values.Where(c => c.Minutes.HasValue).ToList();
-        return known.Count == 0 ? new Countdown(null, true) : known.MaxBy(c => c.Minutes!.Value);
+        if (known.Count == 0) return new Countdown(null, true);
+        var longest = known.MaxBy(c => c.Minutes!.Value);
+        return longest with { Minutes = longest.Minutes + Deferred };
     }
 }
 
 /// <summary>Time left to an achievement at the moment.</summary>
-/// <param name="Minutes">null - longer than even the wide margin.</param>
+/// <param name="Minutes">null - longer than even the wide margin, or passed.</param>
 /// <param name="Late">Past the estimate: the time left is counted with the wide margin.</param>
-public readonly record struct Countdown(double? Minutes, bool Late);
+/// <param name="Passed">Gone past by the order of unlocks, or probably missed: nothing to count (<see cref="Plan.Passed"/>).</param>
+public readonly record struct Countdown(double? Minutes, bool Late, bool Passed = false);
 
 /// <summary>
 /// Order planner.
@@ -121,9 +131,11 @@ public static class Planner
 
         double pace = PaceOf(game, now ?? DateTimeOffset.Now);
         int unknown = open.Count(r => r.EstimateMinutes is null);
-        var left = TimeLeft(rows, p, pace);
-        var wide = p == Percentile.P90 ? left : TimeLeft(GameLogic.BuildRows(game, Percentile.P90), Percentile.P90, pace);
-        return new Plan(sections, left.Count == 0 ? null : left.Values.Max(), unknown, pace) { TimeLeft = left, WideTimeLeft = wide };
+        var (left, deferred) = TimeLeft(rows, p, pace);
+        var wide = p == Percentile.P90 ? left : TimeLeft(GameLogic.BuildRows(game, Percentile.P90), Percentile.P90, pace).Left;
+        var passed = open.Where(r => r.Passed).Select(r => r.ApiName).ToHashSet(StringComparer.Ordinal);
+        double? remaining = left.Count > 0 ? left.Values.Max() + deferred : open.Any(r => r.Passed && r.EstimateMinutes.HasValue) ? deferred : null;
+        return new Plan(sections, remaining, unknown, pace) { TimeLeft = left, WideTimeLeft = wide, Passed = passed, Deferred = deferred };
     }
 
     /// <summary>
@@ -149,13 +161,14 @@ public static class Planner
     };
 
     /// <summary>
-    /// Time left to each locked achievement: the stretches (<see cref="Progress.Stretches"/>) of the locked ones up
-    /// to it, at the player's pace. Played in order, that is the way from the last unlock to it; the last one of
-    /// all is the time to 100%. Unlocks further on do not shorten the way to an earlier one.
-    /// Computed on the scale of the median player at the chosen percentile: own estimates are divided by pace
-    /// and get the same margin as the others, then everything is multiplied by pace.
+    /// Time left to each locked achievement ahead: the stretches (<see cref="Progress.Stretches"/>) of the locked
+    /// ones up to it, at the player's pace. Played in order, that is the way from the last unlock to it. Unlocks
+    /// further on do not shorten the way to an earlier one, but the ones the player has gone past
+    /// (<see cref="AchievementRow.Passed"/>) are not on the way: their stretches are deferred to the end of the way
+    /// to 100%. Computed on the scale of the median player at the chosen percentile: own estimates are divided by
+    /// pace and get the same margin as the others, then everything is multiplied by pace.
     /// </summary>
-    public static Dictionary<string, double> TimeLeft(IReadOnlyList<AchievementRow> rows, Percentile p, double pace)
+    public static (Dictionary<string, double> Left, double Deferred) TimeLeft(IReadOnlyList<AchievementRow> rows, Percentile p, double pace)
     {
         double margin = p switch
         {
@@ -169,12 +182,13 @@ public static class Planner
 
         var left = new Dictionary<string, double>(StringComparer.Ordinal);
         double way = 0;
-        foreach (var point in rows.Where(r => !r.IsDone && at.ContainsKey(r.ApiName)).GroupBy(r => at[r.ApiName]).OrderBy(g => g.Key))
+        foreach (var point in rows.Where(r => !r.IsDone && !r.Passed && at.ContainsKey(r.ApiName)).GroupBy(r => at[r.ApiName]).OrderBy(g => g.Key))
         {
             way += point.Sum(r => stretches[r.ApiName]);
             foreach (var r in point) left[r.ApiName] = way * pace;
         }
-        return left;
+        double deferred = rows.Where(r => r.Passed && at.ContainsKey(r.ApiName)).Sum(r => stretches[r.ApiName]) * pace;
+        return (left, deferred);
     }
 
     private sealed class RowOrder : IComparer<AchievementRow>

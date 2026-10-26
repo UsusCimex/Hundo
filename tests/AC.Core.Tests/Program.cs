@@ -360,9 +360,10 @@ static class Tests
         var q = new AchievementQuery { Sort = SortMode.Time };
         Assert.Equal("ch1,misc,ch5,miss,grind", string.Join(",", q.Apply(g, Percentile.P50).Select(r => r.ApiName)));
 
-        // By time left: locked ones first, the nearest on top, then the done ones.
+        // By time left: the locked ones ahead first, the nearest on top, then the rest. misc is gone past (ch5 after
+        // it is done): it has no time left to count.
         q.TimeLeft = Planner.Build(g, Percentile.P50).TimeLeft;
-        Assert.Equal("misc,miss,grind,ch1,ch5", string.Join(",", q.Apply(g, Percentile.P50).Select(r => r.ApiName)));
+        Assert.Equal("miss,grind,ch1,misc,ch5", string.Join(",", q.Apply(g, Percentile.P50).Select(r => r.ApiName)));
     }
 
     public static void Query_SortsByUnlockDate()
@@ -1209,6 +1210,42 @@ static class Tests
         // With the wide margin chosen, past it there is only the least margin.
         var wide = Planner.Build(g, Percentile.P90).CountDown(miscWide + 5)["misc"];
         Assert.True(wide.Late && Math.Abs(wide.Minutes!.Value - (Planner.MinMarginMinutes - 5)) < 0.01, $"wide {wide}");
+    }
+
+    public static void Progress_Behind()
+    {
+        static string Behind(params (string Name, double At, bool Done)[] a) => string.Join(",", Progress.Behind(a, 15).Order());
+        Assert.Equal("", Behind(("a", 0, false), ("b", 60, false)));
+        // Skipped early: two thirds of the achievements up to the later done ones are done.
+        Assert.Equal("a", Behind(("a", 0, false), ("b", 60, true), ("c", 120, true)));
+        // A single rare one done early moves nothing.
+        Assert.Equal("", Behind(("a", 0, false), ("b", 60, false), ("c", 120, false), ("d", 600, true)));
+        // Nearby ones come about together: one just before the point reached is not behind.
+        Assert.Equal("", Behind(("a", 60, false), ("b", 65, true), ("c", 70, true)));
+    }
+
+    public static void Planner_PassedLeaveTheWay()
+    {
+        // ch1 is skipped, misc and ch5 after it are done: the player has gone past it.
+        var g = SampleGame();
+        g.StateOf("misc").SteamUnlocked = true;
+        g.StateOf("ch5").SteamUnlocked = true;
+        var plan = Planner.Build(g, Percentile.P50);
+        Assert.Equal("ch1", string.Join(",", plan.Passed));
+        Assert.Equal(new Countdown(null, false, true), plan.CountDown(30)["ch1"]);
+        Assert.True(!GameLogic.BuildRows(g, Percentile.P50).Single(r => r.ApiName == "ch1").ProbablyMissed, "a story one can wait");
+        // It takes no play and does not hold the next ones: the nearest one ahead counts down.
+        double ch5 = g.Estimates["ch5"].P50!.Value, miss = g.Estimates["miss"].P50!.Value;
+        var next = plan.CountDown(30)["miss"];
+        Assert.True(!next.Late && Math.Abs(next.Minutes!.Value - (miss - ch5 - 30)) < 0.01, $"miss {next}");
+
+        // A missable one gone past was probably missed; its stretch is left for the end of the way to 100%.
+        g = SampleGame();
+        foreach (var id in new[] { "ch1", "misc", "ch5", "grind" }) g.StateOf(id).SteamUnlocked = true;
+        Assert.True(GameLogic.BuildRows(g, Percentile.P50).Single(r => r.ApiName == "miss").ProbablyMissed, "the missable one");
+        plan = Planner.Build(g, Percentile.P50);
+        Assert.Equal("miss", string.Join(",", plan.Passed));
+        Assert.True(Math.Abs(plan.RemainingAfter(0)!.Value.Minutes!.Value - (miss - ch5)) < 0.01, $"left {plan.RemainingAfter(0)}");
     }
 
     public static void Session_SummaryTakesBackItsUnlocks()
