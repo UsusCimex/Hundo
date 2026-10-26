@@ -218,6 +218,18 @@ public sealed class AchievementRowViewModel : ObservableObject
 
     public bool IsProbablyMissed => _row.ProbablyMissed;
 
+    /// <summary>Shown in the overlay while locked; its "Hide" button takes it off.</summary>
+    public bool InOverlay
+    {
+        get => !_row.OffOverlay;
+        set
+        {
+            if (value != InOverlay) _owner.OnInOverlayChanged(this, value);
+        }
+    }
+
+    public bool IsOffOverlay => IsLocked && _row.OffOverlay;
+
     /// <summary>The overlay pill: the estimate, or a warning for a missable one that was probably missed.</summary>
     public string OverlayBadge => _row.ProbablyMissed ? Loc.T("card.missedShort") : Estimate;
 
@@ -319,7 +331,7 @@ public sealed class AchievementRowViewModel : ObservableObject
         nameof(Estimate), nameof(StatusText), nameof(ManualDone), nameof(OverlayDescription),
         nameof(CanWriteToSteam), nameof(IsSpoilerHidden), nameof(IsTipHidden), nameof(IsHidden), nameof(IsLocked), nameof(IsManualStatus),
         nameof(GroupIsAuto), nameof(IsPendingWrite), nameof(RarityText), nameof(RarityLevel), nameof(EstimateHint),
-        nameof(EstimateBoth), nameof(IsLate),
+        nameof(EstimateBoth), nameof(IsLate), nameof(InOverlay), nameof(IsOffOverlay),
     };
 
     /// <summary>Swaps the row data after a recalculation without recreating the object (keeps focus).</summary>

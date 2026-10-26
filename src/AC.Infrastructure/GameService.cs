@@ -560,6 +560,12 @@ public sealed class GameService
         _store.SaveGame(game);
     }
 
+    public void SetOffOverlay(GameData game, string apiName, bool off)
+    {
+        game.StateOf(apiName).OffOverlay = off;
+        _store.SaveGame(game);
+    }
+
     public void SetKind(GameData game, string apiName, AchievementKind kind)
     {
         GameLogic.SetKind(game, apiName, kind);

@@ -68,6 +68,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UnlockInSteamCommand = new AsyncCommand(p => UnlockInSteamAsync(p, fromOverlay: false), OnError, p => _game != null && RowsFrom(p).Any(r => r.CanWriteToSteam));
         OverlayUnlockCommand = new AsyncCommand(p => UnlockInSteamAsync(p, fromOverlay: true), OnError, p => _game != null && RowsFrom(p).Any(r => r.CanWriteToSteam));
         OverlayMarkCommand = new RelayCommand(p => { if (p is AchievementRowViewModel r) MarkDoneFromOverlay(r); }, _ => ManualUnlocks);
+        OverlayHideCommand = new RelayCommand(p => { if (p is AchievementRowViewModel r) r.InOverlay = false; });
         DownloadUpdateCommand = new RelayCommand(() => OpenUrl(_update?.DownloadUrl), () => _update != null);
         UpdateNotesCommand = new RelayCommand(() => OpenUrl(_update?.PageUrl), () => _update != null);
         CloseSessionCommand = new RelayCommand(() => { _lastSession = null; UpdateSession(); });
@@ -412,6 +413,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Same from the overlay: no dialogs, they may hide behind the game.</summary>
     public AsyncCommand OverlayUnlockCommand { get; }
     public RelayCommand OverlayMarkCommand { get; }
+    public RelayCommand OverlayHideCommand { get; }
     public RelayCommand DownloadUpdateCommand { get; }
     public RelayCommand UpdateNotesCommand { get; }
 
@@ -866,6 +868,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _svc.SetNote(_game, row.ApiName, note);
     }
 
+    internal void OnInOverlayChanged(AchievementRowViewModel row, bool inOverlay)
+    {
+        if (_game is null) return;
+        _svc.SetOffOverlay(_game, row.ApiName, !inOverlay);
+        Recompute(rebuildRows: false);
+    }
+
     internal void OnEstimateChanged(AchievementRowViewModel row, double? minutes)
     {
         if (_game is null) return;
@@ -1206,17 +1215,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void UpdateOverlayLists(IReadOnlyList<AchievementRow> all)
     {
+        var open = all.Where(r => !r.IsDone && !r.OffOverlay).ToList();
         OverlayMissable.Clear();
-        foreach (var r in all.Where(r => !r.IsDone && r.Kind == AchievementKind.Missable)
-                             .OrderBy(r => HoursOf(r) ?? double.MaxValue).Take(6))
+        foreach (var r in open.Where(r => r.Kind == AchievementKind.Missable)
+                              .OrderBy(r => HoursOf(r) ?? double.MaxValue).Take(6))
             OverlayMissable.Add(new AchievementRowViewModel(this, r));
 
         OverlayNearest.Clear();
-        foreach (var r in all.Where(r => !r.IsDone && r.Kind != AchievementKind.Missable)
-                             .OrderBy(r => HoursOf(r) is null)
-                             .ThenBy(HoursOf)
-                             .ThenByDescending(r => r.Def.Percent ?? -1)
-                             .Take(Math.Max(1, _svc.Settings.OverlayNearestCount)))
+        foreach (var r in open.Where(r => r.Kind != AchievementKind.Missable)
+                              .OrderBy(r => HoursOf(r) is null)
+                              .ThenBy(HoursOf)
+                              .ThenByDescending(r => r.Def.Percent ?? -1)
+                              .Take(Math.Max(1, _svc.Settings.OverlayNearestCount)))
             OverlayNearest.Add(new AchievementRowViewModel(this, r));
     }
 

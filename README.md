@@ -28,4 +28,4 @@
 | Keys | Action |
 | --- | --- |
 | `Ctrl+Shift+A` | Show or hide the overlay |
-| `Ctrl+Shift+S` | Overlay click mode: drag it to another place |
+| `Ctrl+Shift+S` | Overlay click mode: hide an achievement or drag the overlay to another place |

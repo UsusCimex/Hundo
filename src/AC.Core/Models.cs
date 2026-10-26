@@ -59,6 +59,8 @@ public sealed class AchievementState
     public bool ManualDone { get; set; }
     public DateTimeOffset? ManualAt { get; set; }
     public string Note { get; set; } = "";
+    /// <summary>The user took it off the overlay: a missed one stays there until the next playthrough otherwise.</summary>
+    public bool OffOverlay { get; set; }
 }
 
 /// <summary>Achievement tags: kind and "one sitting" group.</summary>
@@ -209,6 +211,7 @@ public sealed class GameData
 
 /// <summary>List row: schema + state + tags + estimate.</summary>
 /// <param name="Behind">Locked, and the player has gone past it by the order of unlocks (<see cref="GameLogic.Behind"/>).</param>
+/// <param name="OffOverlay">The user took it off the overlay (<see cref="AchievementState.OffOverlay"/>).</param>
 public sealed record AchievementRow(
     AchievementDef Def,
     EffectiveStatus Status,
@@ -220,7 +223,8 @@ public sealed record AchievementRow(
     DateTimeOffset? UnlockTime,
     bool GroupIsAuto = false,
     bool ProbablyMissed = false,
-    bool Behind = false)
+    bool Behind = false,
+    bool OffOverlay = false)
 {
     public string ApiName => Def.ApiName;
     public bool IsDone => Status != EffectiveStatus.Locked;

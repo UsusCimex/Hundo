@@ -353,6 +353,9 @@
                                 Visibility="{Binding IsProbablyMissed, Converter={StaticResource BoolToVis}}" ToolTip="{local:Tr card.missedTip}">
                             <TextBlock Text="{local:Tr card.missed}" Style="{StaticResource ChipText}" />
                         </Border>
+                        <Border Style="{StaticResource Chip}" Visibility="{Binding IsOffOverlay, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="{local:Tr card.offOverlay}" Style="{StaticResource ChipText}" />
+                        </Border>
                         <Border Style="{StaticResource Chip}" Visibility="{Binding IsProtected, Converter={StaticResource BoolToVis}}"
                                 ToolTip="{local:Tr card.protectedTip}">
                             <TextBlock Text="{local:Tr card.protected}" Style="{StaticResource ChipText}" />
@@ -973,6 +976,10 @@
 
                                     <TextBlock Text="{local:Tr details.note}" Style="{StaticResource Caption}" Margin="0,10,0,2" />
                                     <TextBox Text="{Binding Note, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" />
+
+                                    <CheckBox Content="{local:Tr details.inOverlay}" Margin="0,12,0,0"
+                                              IsChecked="{Binding InOverlay, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              Visibility="{Binding IsLocked, Converter={StaticResource BoolToVis}}" />
 
                                     <StackPanel Visibility="{Binding DataContext.ManualUnlocks, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                                         <CheckBox Content="{local:Tr details.done}" Margin="0,12,0,8"

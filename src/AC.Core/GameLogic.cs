@@ -73,7 +73,8 @@ public static class GameLogic
                 },
                 t is { Group.Length: > 0, GroupIsManual: false },
                 missed.Contains(def.ApiName) || gonePast && kind == AchievementKind.Missable,
-                gonePast));
+                gonePast,
+                s?.OffOverlay == true));
         }
         return rows;
     }

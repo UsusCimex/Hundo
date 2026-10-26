@@ -1333,6 +1333,7 @@ static class Tests
             var g = SampleGame();
             g.StateOf("misc").ManualDone = true;
             g.StateOf("misc").Note = "заметка";
+            g.StateOf("miss").OffOverlay = true;
             g.PendingUnlocks.Add("misc");
             GameLogic.SetKind(g, "ch1", AchievementKind.Grind);
             g.Tags["grind"] = new AchievementTag { Kind = AchievementKind.Grind, Group = "Старая группа" }; // old format, no GroupSource
@@ -1342,6 +1343,8 @@ static class Tests
             Assert.Equal(5, back.Achievements.Count);
             Assert.True(back.States["misc"].ManualDone);
             Assert.Equal("заметка", back.States["misc"].Note);
+            var offOverlay = GameLogic.BuildRows(back, Percentile.P50).Where(r => r.OffOverlay).Select(r => r.ApiName);
+            Assert.Equal("miss", string.Join(",", offOverlay));
             Assert.Equal(AchievementKind.Grind, back.Tags["ch1"].Kind);
             Assert.Equal(KindSource.Manual, back.Tags["ch1"].Source);
             Assert.Equal("misc", back.PendingUnlocks.Single());
