@@ -223,6 +223,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Minutes played since the last unlock when the time left was last counted.</summary>
     private double _played;
     private IReadOnlyDictionary<string, Countdown> _countdown = new Dictionary<string, Countdown>();
+    /// <summary>Marked by time in this run: one the user unmarks again stays unmarked.</summary>
+    private readonly HashSet<string> _autoMarked = new(StringComparer.Ordinal);
 
     /// <summary>Time left to a locked achievement now; null - done or no estimate.</summary>
     internal Countdown? CountdownOf(string apiName) => _countdown.TryGetValue(apiName, out var c) ? c : null;
@@ -1296,6 +1298,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             await SafeAsync(RefreshStateAsync);
         }
         CountDown();
+        MarkDue(running);
+    }
+
+    /// <summary>With auto marks on, marks the achievement whose time is up (<see cref="Plan.Due"/>) while its game runs.</summary>
+    private void MarkDue(uint running)
+    {
+        if (!ManualUnlocks || !_svc.Settings.AutoMark || IsBusy) return;
+        if (_game is not { } game || game.AppId != running || _plan is not { } plan) return;
+        if (plan.Due(PlayedSinceUnlock(game)) is not { } name || !_autoMarked.Add($"{game.AppId}/{name}")) return;
+        if (_rows.FirstOrDefault(r => r.ApiName == name) is not { IsDone: false } row) return;
+        var vm = new AchievementRowViewModel(this, row);
+        Toast?.Invoke(Loc.T("status.autoMarked", vm.Name));
+        vm.ManualDone = true;
     }
 
     /// <summary>Steam counts a session's playtime a little after it ends; the new point goes to the playtime history.</summary>

@@ -21,6 +21,7 @@ public partial class SettingsWindow : Window
         UiLanguageBox.SelectedItem = Options.UiLanguages.FirstOrDefault(l => l.Value == s.UiLanguage) ?? Options.UiLanguages[0];
         ManualUnlocksBox.IsChecked = s.ManualUnlocks;
         WriteModeBox.SelectedItem = Options.WriteModes.FirstOrDefault(m => m.Value == s.WriteMode) ?? Options.WriteModes[0];
+        AutoMarkBox.IsChecked = s.AutoMark;
         StatusSourceBox.SelectedItem = Options.StatusSources.FirstOrDefault(m => m.Value == s.StatusSource) ?? Options.StatusSources[0];
         ThemeBox.SelectedItem = Options.Themes.FirstOrDefault(t => t.Value == s.Theme) ?? Options.Themes[0];
         HideSpoilersBox.IsChecked = s.HideSpoilers;
@@ -45,6 +46,13 @@ public partial class SettingsWindow : Window
         if (ManualUnlocksBox.IsChecked != true) return;
         var answer = MessageBox.Show(this, Loc.T("dialog.manualUnlocks"), Title, MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (answer != MessageBoxResult.Yes) ManualUnlocksBox.IsChecked = false;
+    }
+
+    private void OnAutoMarkClick(object sender, RoutedEventArgs e)
+    {
+        if (AutoMarkBox.IsChecked != true) return;
+        var answer = MessageBox.Show(this, Loc.T("dialog.autoMark"), Title, MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (answer != MessageBoxResult.Yes) AutoMarkBox.IsChecked = false;
     }
 
     private void OnDetectSteamId(object sender, RoutedEventArgs e)
@@ -86,6 +94,7 @@ public partial class SettingsWindow : Window
         s.UiLanguage = (UiLanguageBox.SelectedItem as Option<string>)?.Value ?? Loc.Fallback;
         s.ManualUnlocks = ManualUnlocksBox.IsChecked == true;
         s.WriteMode = (WriteModeBox.SelectedItem as Option<WriteMode>)?.Value ?? WriteMode.MarkOnly;
+        s.AutoMark = AutoMarkBox.IsChecked == true;
         s.StatusSource = (StatusSourceBox.SelectedItem as Option<StatusSource>)?.Value ?? StatusSource.WebApi;
         s.Theme = (ThemeBox.SelectedItem as Option<AppTheme>)?.Value ?? AppTheme.System;
         s.HideSpoilers = HideSpoilersBox.IsChecked == true;

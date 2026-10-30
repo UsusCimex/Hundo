@@ -67,6 +67,22 @@ public sealed record Plan(
         return result;
     }
 
+    /// <summary>
+    /// The achievement whose time is up after that play: the nearest one ahead, once the play reaches its time left.
+    /// Of several at the same point the most common goes first; the others share the stretch and come later.
+    /// null - none yet.
+    /// </summary>
+    public string? Due(double played)
+    {
+        if (TimeLeft.Count == 0) return null;
+        double nearest = TimeLeft.Values.Min();
+        if (played < nearest) return null;
+        return Ordered.Where(r => TimeLeft.TryGetValue(r.ApiName, out var left) && left == nearest)
+            .OrderByDescending(r => r.Def.Percent ?? -1)
+            .Select(r => r.ApiName)
+            .FirstOrDefault();
+    }
+
     /// <summary>The time to 100% after that play: the longest countdown and the deferred stretches; null - nothing to count.</summary>
     public Countdown? RemainingAfter(double played)
     {

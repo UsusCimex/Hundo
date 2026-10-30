@@ -1248,6 +1248,26 @@ static class Tests
         Assert.True(Math.Abs(plan.RemainingAfter(0)!.Value.Minutes!.Value - (miss - ch5)) < 0.01, $"left {plan.RemainingAfter(0)}");
     }
 
+    public static void Planner_Due()
+    {
+        // ch1 is the most common, at the very start: due at once.
+        var g = SampleGame();
+        Assert.Equal("ch1", Planner.Build(g, Percentile.P50).Due(0));
+
+        // Marked, the next one counts from it.
+        g.StateOf("ch1").ManualDone = true;
+        g.StateOf("ch1").ManualAt = DateTimeOffset.Now;
+        var plan = Planner.Build(g, Percentile.P50);
+        double misc = plan.TimeLeft["misc"];
+        Assert.True(misc > 0 && plan.TimeLeft.Values.Min() == misc, $"misc is the nearest: {misc}");
+        Assert.Equal<string?>(null, plan.Due(misc - 1));
+        Assert.Equal("misc", plan.Due(misc));
+
+        // Of two at the same point the most common goes first.
+        g.ManualEstimates["grind"] = g.Estimates["misc"].P50!.Value;
+        Assert.Equal("misc", Planner.Build(g, Percentile.P50).Due(misc));
+    }
+
     public static void Session_SummaryTakesBackItsUnlocks()
     {
         var start = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);

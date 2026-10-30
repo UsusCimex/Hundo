@@ -67,6 +67,10 @@
                             <ComboBox x:Name="WriteModeBox" ItemsSource="{x:Static local:Options.WriteModes}" DisplayMemberPath="Title" HorizontalAlignment="Stretch" />
                             <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0"
                                        Text="{local:Tr settings.writeHint}" />
+                            <CheckBox x:Name="AutoMarkBox" Content="{local:Tr settings.autoMark}" Margin="0,12,0,0"
+                                      Click="OnAutoMarkClick" />
+                            <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                       Text="{local:Tr settings.autoMarkHint}" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
