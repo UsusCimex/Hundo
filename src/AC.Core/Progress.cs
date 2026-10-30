@@ -156,7 +156,8 @@ public static class Progress
 
     /// <summary>
     /// Known playtime moments, oldest first, ending with the current playtime; manual corrections applied.
-    /// Sessions after the last point of the history are not in Steam's playtime yet: they go on top of it.
+    /// Sessions after the last point of the history go on top of it. Steam's playtime may show part of a running
+    /// session already, so only what it shows beyond them is play the app did not see, taken to come first.
     /// </summary>
     private static List<PlaytimePoint> Points(GameData game, DateTimeOffset now, IReadOnlyList<PlaySession> played)
     {
@@ -164,15 +165,17 @@ public static class Progress
         if (game.PlaytimeOverrideMinutes is null) raw.AddRange(game.PlaytimeHistory.Where(p => p.At < now).OrderBy(p => p.At));
         double counted = game.PlaytimeOverrideMinutes ?? game.PlaytimeMinutes, extra = 0;
         var since = raw.Count > 0 ? raw[^1].At : DateTimeOffset.MinValue;
-        foreach (var s in played.Where(s => s.End > since && s.Start < now).OrderBy(s => s.Start))
+        var sessions = played.Where(s => s.End > since && s.Start < now).OrderBy(s => s.Start)
+            .Select(s => (Start: s.Start > since ? s.Start : since, End: s.End < now ? s.End : now)).ToList();
+        double sessionMinutes = sessions.Sum(s => (s.End - s.Start).TotalMinutes);
+        double from = raw.Count > 0 ? Math.Max(raw[^1].Minutes, counted - sessionMinutes) : counted;
+        foreach (var (start, end) in sessions)
         {
-            var start = s.Start > since ? s.Start : since;
-            var end = s.End < now ? s.End : now;
-            raw.Add(new PlaytimePoint { At = start, Minutes = counted + extra });
+            raw.Add(new PlaytimePoint { At = start, Minutes = from + extra });
             extra += (end - start).TotalMinutes;
-            raw.Add(new PlaytimePoint { At = end, Minutes = counted + extra });
+            raw.Add(new PlaytimePoint { At = end, Minutes = from + extra });
         }
-        raw.Add(new PlaytimePoint { At = now, Minutes = counted + extra });
+        raw.Add(new PlaytimePoint { At = now, Minutes = from + extra });
 
         double offset = game.PlaytimeOverrideMinutes is null ? game.PlaytimeOffsetMinutes : 0, seen = 0;
         var points = new List<PlaytimePoint>(raw.Count);

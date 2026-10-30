@@ -1212,6 +1212,24 @@ static class Tests
         Assert.Equal(45.0, Math.Round(Progress.MinutesSinceProgress(g, t0.AddHours(5), [ended]), 1));
     }
 
+    public static void Progress_SteamCountsARunningSession()
+    {
+        // 300 minutes at 18:00, then a session from 18:00. Read again mid-session, Steam's playtime shows 50 of its
+        // minutes already: at 19:00 an hour has passed since the unlock, not 110 minutes.
+        var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
+        var g = SampleGame();
+        g.PlaytimeHistory.Add(new PlaytimePoint { At = t0, Minutes = 300 });
+        g.PlaytimeMinutes = 350;
+        g.StateOf("ch1").SteamUnlocked = true;
+        g.StateOf("ch1").SteamUnlockTime = t0.AddMinutes(-10);
+        var running = new[] { new PlaySession(1, t0, t0.AddHours(1)) };
+        Assert.Equal(60.0, Math.Round(Progress.MinutesSinceProgress(g, t0.AddHours(1), running), 1));
+
+        // Steam's playtime beyond the session is play the app did not see.
+        g.PlaytimeMinutes = 380;
+        Assert.Equal(80.0, Math.Round(Progress.MinutesSinceProgress(g, t0.AddHours(1), running), 1));
+    }
+
     public static void Progress_SessionStartJoinsTheHistory()
     {
         var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
