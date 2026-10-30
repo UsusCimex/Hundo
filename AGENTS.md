@@ -28,7 +28,7 @@ The script works on copies of the build and of the data folder, so the real fold
 | `AC_NO_STEAM_CLIENT=1` | the app never connects to the Steam client |
 | `AC_SOFTWARE_RENDERING=1` | software rendering: hardware rendering stops while the display is off |
 | `AC_UPDATE_URL` | another "latest release" JSON, for testing updates against a local server |
-| `AC_RUNNING_APPID` | the app takes this game for the running one: checks of what happens during play without a game |
+| `AC_RUNNING_APPID` | the app takes these games (`480,2315050`) for the running ones: checks of what happens during play without a game |
 
 ## Structure
 
@@ -85,7 +85,7 @@ The app was first called Achievement Companion: the data folder, the DPAPI entro
 | Guide quotes | `IPublishedFileService/QueryFiles` (key): guides tagged Achievements and the language, up to 5 by title, until every achievement has words; `GetSubSectionData`: sections in BBCode; pictures from its tags and links, `[previewimg]` ones from the uploads (`return_previews`), without icons by size; authors from `GetPlayerSummaries`. The content language first, then English with English names from the local schema or `GetSchemaForGame` |
 | Translation of quotes | on a click: `translate.googleapis.com/translate_a/single?client=gtx`, Google Translate's keyless web endpoint (not an official API); when it does not answer, the translator's page in the browser |
 | Store art | `store_item_assets/steam/apps/<appid>/header.jpg`; newer apps keep it in a hashed folder: `IStoreBrowseService/GetItems`, else the store's `appdetails` |
-| Running game and new unlocks | registry `RunningAppID`, watching `appcache/stats/UserGameStats_<accountid>_<appid>.bin` and polling on a timer |
+| Running games and new unlocks | registry `RunningAppID`, which names one game, and processes started from an installed game's folder (`appmanifest_*.acf` of the libraries in `libraryfolders.vdf`); per-app `Running` flags stay set after a game closes. Watching `appcache/stats/UserGameStats_<accountid>_<appid>.bin` and polling on a timer |
 | Updates | `api.github.com/repos/UsusCimex/Hundo/releases/latest`: the `*-win-x64.zip` asset, or `*-win-x64-setup.exe` for a copy installed by the setup (`unins000.exe` beside the exe), downloaded by the browser |
 
 ### Time

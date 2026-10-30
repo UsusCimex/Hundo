@@ -20,7 +20,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private StatsFileWatcher? _watcher;
     private DateTime _lastPoll = DateTime.MinValue;
     private bool _refreshing;
-    private uint _lastRunningAppId;
+    private IReadOnlySet<uint> _lastRunning = new HashSet<uint>();
     private readonly SessionTracker _sessions;
     /// <summary>The last session seen from its start: its summary stays until dismissed or the next session starts.</summary>
     private PlaySession? _lastSession;
@@ -76,8 +76,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OpenGuideTipCommand = new RelayCommand(p => OpenUrl(p is AchievementRowViewModel r ? GuideTipFor(r.ApiName)?.Url : null));
         TranslateTipCommand = new AsyncCommand(p => TranslateTipAsync(p as AchievementRowViewModel), OnError);
 
-        uint runningAtStart = 0;
-        try { runningAtStart = SteamLocal.RunningAppId(); }
+        IReadOnlySet<uint> runningAtStart = new HashSet<uint>();
+        try { runningAtStart = SteamLocal.RunningAppIds(); }
         catch { }
         _sessions = new SessionTracker(runningAtStart, DateTimeOffset.Now);
 
@@ -453,8 +453,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             await SafeAsync(RefreshLibraryAsync);
         }
 
-        var running = SteamLocal.RunningAppId();
-        var start = running != 0 ? running : _svc.Settings.LastAppId;
+        var running = SteamLocal.RunningAppIds();
+        var last = _svc.Settings.LastAppId;
+        var start = running.Count == 0 || running.Contains(last) ? last : Followed(running);
         if (start != 0) await SafeAsync(() => LoadAsync(start, Library.FirstOrDefault(g => g.AppId == start)?.Name));
         await SafeAsync(CheckUpdateAsync);
     }
@@ -1265,47 +1266,58 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private async Task OnRunningTickAsync()
     {
-        uint running;
-        try { running = SteamLocal.RunningAppId(); }
+        IReadOnlySet<uint> running;
+        try { running = SteamLocal.RunningAppIds(); }
         catch { return; }
 
-        if (running != _lastRunningAppId)
+        if (!running.SetEquals(_lastRunning))
         {
             // While something loads, do not remember it; retry on the next tick.
             if (IsBusy) return;
-            if (_sessions.Observe(running, DateTimeOffset.Now) is { } ended) _lastSession = ended;
-            else if (running != 0) _lastSession = null;
+            var ended = _sessions.Observe(running, DateTimeOffset.Now);
+            var started = running.Except(_lastRunning).ToList();
+            if (ended.Count > 0) _lastSession = ended.FirstOrDefault(s => s.AppId == _game?.AppId) ?? ended[^1];
+            else if (started.Count > 0) _lastSession = null;
             UpdateSession();
-            if (_lastRunningAppId != 0 && _game is { } played && played.AppId == _lastRunningAppId && _svc.HasApiKey)
+            if (_game is { } played && _lastRunning.Contains(played.AppId) && !running.Contains(played.AppId) && _svc.HasApiKey)
             {
                 var session = _lastSession;
                 _ = SafeAsync(() => AfterSessionAsync(played, session));
             }
-            _lastRunningAppId = running;
-            if (running != 0 && AutoFollow && running != _game?.AppId)
+            _lastRunning = running;
+            if (AutoFollow && started.Count > 0 && (_game is null || !running.Contains(_game.AppId)))
             {
-                await SafeAsync(() => LoadAsync(running, Library.FirstOrDefault(g => g.AppId == running)?.Name));
+                var next = Followed(started);
+                await SafeAsync(() => LoadAsync(next, Library.FirstOrDefault(g => g.AppId == next)?.Name));
                 return;
             }
         }
 
         // While the game runs, poll the status (in case the stats file did not change).
+        bool openRunning = _game is { } open && running.Contains(open.AppId);
         bool canRefresh = _svc.HasApiKey || _svc.Bridge.Exists;
-        if (running != 0 && running == _game?.AppId && canRefresh && !IsBusy &&
+        if (openRunning && canRefresh && !IsBusy &&
             DateTime.Now - _lastPoll > TimeSpan.FromSeconds(Math.Max(15, _svc.Settings.PollSeconds)))
         {
             _lastPoll = DateTime.Now;
             await SafeAsync(RefreshStateAsync);
         }
         CountDown();
-        MarkDue(running);
+        if (openRunning) MarkDue();
     }
 
-    /// <summary>With auto marks on, marks the achievement whose time is up (<see cref="Plan.Due"/>) while its game runs.</summary>
-    private void MarkDue(uint running)
+    /// <summary>
+    /// Of the games started, the one to open: an installed game before one known only from Steam's registry, such as
+    /// Spacewar started by an online fix next to the game.
+    /// </summary>
+    private static uint Followed(IReadOnlyCollection<uint> started) =>
+        started.OrderByDescending(a => SteamLocal.InstalledGames().ContainsKey(a)).First();
+
+    /// <summary>With auto marks on, marks the achievement of the running open game whose time is up (<see cref="Plan.Due"/>).</summary>
+    private void MarkDue()
     {
         if (!ManualUnlocks || !_svc.Settings.AutoMark || IsBusy) return;
-        if (_game is not { } game || game.AppId != running || _plan is not { } plan) return;
+        if (_game is not { } game || _plan is not { } plan) return;
         if (plan.Due(PlayedSinceUnlock(game)) is not { } name || !_autoMarked.Add($"{game.AppId}/{name}")) return;
         if (_rows.FirstOrDefault(r => r.ApiName == name) is not { IsDone: false } row) return;
         var vm = new AchievementRowViewModel(this, row);
@@ -1318,7 +1330,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private async Task AfterSessionAsync(GameData game, PlaySession? session)
     {
         await Task.Delay(TimeSpan.FromMinutes(2));
-        if (_game != game || IsBusy || SteamLocal.RunningAppId() == game.AppId) return;
+        if (_game != game || IsBusy || SteamLocal.RunningAppIds().Contains(game.AppId)) return;
         try
         {
             await _svc.RefreshPlaytimeAsync(game, session);

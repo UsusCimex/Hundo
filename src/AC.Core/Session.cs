@@ -4,35 +4,61 @@ namespace AC.Core;
 public sealed record PlaySession(uint AppId, DateTimeOffset Start, DateTimeOffset End);
 
 /// <summary>
-/// Follows the running game from tick to tick: reports the sessions seen from their start and keeps all play seen,
-/// since Steam's playtime shows a session only after it ends.
+/// Follows the running games from tick to tick, each on its own: reports the sessions seen from their start and keeps
+/// all play seen, since Steam's playtime shows a session late.
 /// </summary>
-public sealed class SessionTracker(uint runningAtStart, DateTimeOffset startedAt)
+public sealed class SessionTracker
 {
-    private uint _running = runningAtStart;
-    // A game already running when the app started has no known start, so its session is not reported.
-    private DateTimeOffset? _start;
-    // Since when the running game is known to run: its start, or the app's.
-    private DateTimeOffset _since = startedAt;
+    // Per running game: its start, unknown for one already running when the app started (its session is not
+    // reported), and since when it is known to run.
+    private readonly Dictionary<uint, (DateTimeOffset? Start, DateTimeOffset Since)> _running = new();
     private readonly List<PlaySession> _played = new();
 
-    /// <summary>The game running now (0 - none). Returns the session that has just ended.</summary>
-    public PlaySession? Observe(uint running, DateTimeOffset now)
+    public SessionTracker(IEnumerable<uint> runningAtStart, DateTimeOffset startedAt)
     {
-        if (running == _running) return null;
-        if (_running != 0) _played.Add(new PlaySession(_running, _since, now));
-        var ended = _running != 0 && _start is { } start ? new PlaySession(_running, start, now) : null;
-        _running = running;
-        _start = running != 0 ? now : null;
-        _since = now;
+        foreach (var app in runningAtStart.Where(a => a != 0)) _running[app] = (null, startedAt);
+    }
+
+    /// <summary>The games running now. Returns the sessions that have just ended.</summary>
+    public IReadOnlyList<PlaySession> Observe(IReadOnlyCollection<uint> running, DateTimeOffset now)
+    {
+        var ended = new List<PlaySession>();
+        foreach (var (app, (start, since)) in _running.Where(r => !running.Contains(r.Key)).ToList())
+        {
+            _played.Add(new PlaySession(app, since, now));
+            if (start is { } s) ended.Add(new PlaySession(app, s, now));
+            _running.Remove(app);
+        }
+        foreach (var app in running.Where(a => a != 0 && !_running.ContainsKey(a))) _running[app] = (now, now);
         return ended;
     }
+
+    public bool IsRunning(uint appId) => _running.ContainsKey(appId);
 
     /// <summary>The play of a game seen since the app started, the running session up to now included.</summary>
     public IReadOnlyList<PlaySession> Played(uint appId, DateTimeOffset now) =>
         _played.Where(s => s.AppId == appId)
-            .Concat(_running == appId ? [new PlaySession(appId, _since, now)] : [])
+            .Concat(_running.TryGetValue(appId, out var r) ? [new PlaySession(appId, r.Since, now)] : [])
             .ToList();
+}
+
+public static class RunningGames
+{
+    /// <summary>
+    /// Installed games with a process started from their folder. Steam names only one running game, and with two at
+    /// once (a game and Spacewar started by an online fix) the other one would go unnoticed.
+    /// </summary>
+    public static HashSet<uint> ByProcess(IEnumerable<string> processPaths, IReadOnlyDictionary<uint, string> installDirs)
+    {
+        var paths = processPaths.ToList();
+        var running = new HashSet<uint>();
+        foreach (var (app, dir) in installDirs)
+        {
+            var folder = dir.TrimEnd('\\', '/') + '\\';
+            if (paths.Any(p => p.StartsWith(folder, StringComparison.OrdinalIgnoreCase))) running.Add(app);
+        }
+        return running;
+    }
 }
 
 /// <summary>What a session did: its unlocks in order and the time to 100% without and with them.</summary>

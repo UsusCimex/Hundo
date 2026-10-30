@@ -102,4 +102,16 @@ public static class TextVdf
         VdfNode? pick = users.Children.FirstOrDefault(u => u.Get("MostRecent") == "1") ?? users.Children[0];
         return ulong.TryParse(pick.Name, out var id) ? (id, pick.Get("PersonaName")) : null;
     }
+
+    /// <summary>From libraryfolders.vdf: the folders of the Steam libraries.</summary>
+    public static IReadOnlyList<string> LibraryPaths(string libraryFoldersVdf) =>
+        Parse(libraryFoldersVdf)["libraryfolders"]?.Children.Select(f => f.Get("path")).Where(p => p.Length > 0).ToList() ?? [];
+
+    /// <summary>From an appmanifest_*.acf: the app and its folder under steamapps\common.</summary>
+    public static (uint AppId, string InstallDir)? AppManifest(string acf)
+    {
+        var state = Parse(acf)["AppState"];
+        return state is not null && uint.TryParse(state.Get("appid"), out var id) && state.Get("installdir") is { Length: > 0 } dir
+            ? (id, dir) : null;
+    }
 }

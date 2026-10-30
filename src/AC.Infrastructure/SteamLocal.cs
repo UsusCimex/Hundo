@@ -1,12 +1,15 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using AC.Core;
 using AC.Core.SteamFormats;
 using Microsoft.Win32;
 
 namespace AC.Infrastructure;
 
 /// <summary>
-/// Reads local Steam offline, no game process access: registry,
-/// loginusers.vdf, appcache/stats.
+/// Reads local Steam offline, no game process access: registry, loginusers.vdf, libraries and app manifests,
+/// appcache/stats, and the program files of running processes.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public static class SteamLocal
@@ -23,19 +26,85 @@ public static class SteamLocal
     }
 
     /// <summary>
-    /// Running game AppID (Steam writes it itself), 0 - nothing is running.
-    /// AC_RUNNING_APPID makes the app take that game for the running one: to check what happens during play without a game.
+    /// The games running now: the one Steam names in the registry and the installed ones with a process started from
+    /// their folder (<see cref="RunningGames.ByProcess"/>). Steam names only one, and its per-app Running flags stay
+    /// set after a game closes. AC_RUNNING_APPID ("480,2315050") makes the app take those games for the only running
+    /// ones: to check what happens during play without a game.
     /// </summary>
-    public static uint RunningAppId()
+    public static IReadOnlySet<uint> RunningAppIds()
     {
-        if (uint.TryParse(Environment.GetEnvironmentVariable("AC_RUNNING_APPID"), out var fake)) return fake;
-        var v = Registry.GetValue(SteamKey, "RunningAppID", 0);
-        return v switch
-        {
-            int i when i > 0 => (uint)i,
-            _ => 0,
-        };
+        if (Environment.GetEnvironmentVariable("AC_RUNNING_APPID") is { } fake)
+            return fake.Split(',', StringSplitOptions.TrimEntries).Select(s => uint.TryParse(s, out var id) ? id : 0).Where(id => id != 0).ToHashSet();
+        var running = RunningGames.ByProcess(ProcessPaths(), InstalledGames());
+        if (Registry.GetValue(SteamKey, "RunningAppID", 0) is int named and > 0) running.Add((uint)named);
+        return running;
     }
+
+    private sealed record InstalledCache(DateTime At, IReadOnlyDictionary<uint, string> Games);
+    private static InstalledCache? _installed;
+    private static readonly TimeSpan InstalledTtl = TimeSpan.FromMinutes(5);
+
+    /// <summary>Installed games and their folders, from the app manifests of the Steam libraries; read again after a few minutes.</summary>
+    public static IReadOnlyDictionary<uint, string> InstalledGames()
+    {
+        if (_installed is { } cache && DateTime.UtcNow - cache.At < InstalledTtl) return cache.Games;
+        var games = new Dictionary<uint, string>();
+        if (SteamPath() is { } steam)
+        {
+            var libraries = new List<string> { steam };
+            try { libraries.AddRange(TextVdf.LibraryPaths(File.ReadAllText(Path.Combine(steam, "steamapps", "libraryfolders.vdf")))); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            foreach (var library in libraries.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var apps = Path.Combine(library, "steamapps");
+                if (!Directory.Exists(apps)) continue;
+                foreach (var file in Directory.EnumerateFiles(apps, "appmanifest_*.acf"))
+                {
+                    try
+                    {
+                        if (TextVdf.AppManifest(File.ReadAllText(file)) is { } m)
+                            games[m.AppId] = Path.GetFullPath(Path.Combine(apps, "common", m.InstallDir));
+                    }
+                    catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                }
+            }
+        }
+        _installed = new InstalledCache(DateTime.UtcNow, games);
+        return games;
+    }
+
+    /// <summary>The program files of the running processes; ones that do not let even that be read are skipped.</summary>
+    private static List<string> ProcessPaths()
+    {
+        var paths = new List<string>();
+        var name = new char[1024];
+        foreach (var p in Process.GetProcesses())
+        {
+            using (p)
+            {
+                var h = OpenProcess(ProcessQueryLimitedInformation, false, p.Id);
+                if (h == IntPtr.Zero) continue;
+                try
+                {
+                    int size = name.Length;
+                    if (QueryFullProcessImageNameW(h, 0, name, ref size)) paths.Add(new string(name, 0, size));
+                }
+                finally { CloseHandle(h); }
+            }
+        }
+        return paths;
+    }
+
+    private const uint ProcessQueryLimitedInformation = 0x1000;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint access, bool inherit, int processId);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool QueryFullProcessImageNameW(IntPtr process, uint flags, [Out] char[] name, ref int size);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr handle);
 
     /// <summary>Steam UI language (russian, english...).</summary>
     public static string? ClientLanguage() => Registry.GetValue(SteamKey, "Language", null) as string;

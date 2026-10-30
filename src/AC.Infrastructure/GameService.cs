@@ -234,7 +234,7 @@ public sealed class GameService
         if (own is null) return;
         game.PlaytimeMinutes = own.PlaytimeMinutes;
         // Mid-session Steam has not counted the current session yet.
-        if (SteamLocal.RunningAppId() != game.AppId)
+        if (!SteamLocal.RunningAppIds().Contains(game.AppId))
         {
             var now = DateTimeOffset.Now;
             Progress.AddPlaytime(game, now.AddDays(-14), own.PlaytimeMinutes - own.Playtime2WeeksMinutes);

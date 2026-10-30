@@ -655,6 +655,44 @@ static class Tests
         Assert.Equal("Usus \"Cimex\"", u.Value.PersonaName);
     }
 
+    public static void Vdf_LibrariesAndRunningGames()
+    {
+        const string libraries = """
+        "libraryfolders"
+        {
+            "0"
+            {
+                "path"      "C:\\Program Files (x86)\\Steam"
+                "apps" { "228980" "0" }
+            }
+            "1"
+            {
+                "path"      "D:\\SteamLibrary"
+            }
+        }
+        """;
+        Assert.Equal(@"C:\Program Files (x86)\Steam|D:\SteamLibrary", string.Join("|", TextVdf.LibraryPaths(libraries)));
+        const string manifest = """
+        "AppState"
+        {
+            "appid"         "2315050"
+            "name"          "We Were Here Tomorrow"
+            "installdir"    "We Were Here Tomorrow"
+        }
+        """;
+        Assert.Equal<(uint, string)?>((2315050u, "We Were Here Tomorrow"), TextVdf.AppManifest(manifest));
+
+        // A process from the game's folder, whatever case Windows reports it in; a folder that only starts the same does not count.
+        var dirs = new Dictionary<uint, string>
+        {
+            [2315050] = @"D:\SteamLibrary\steamapps\common\We Were Here Tomorrow",
+            [677160] = @"D:\SteamLibrary\steamapps\common\We Were Here",
+        };
+        var running = RunningGames.ByProcess(
+            [@"d:\steamlibrary\steamapps\common\We Were Here Tomorrow\Bin\WWHT.exe", @"C:\Windows\explorer.exe"], dirs);
+        Assert.Equal("2315050", string.Join(",", running));
+    }
+
     public static void SteamHunters_Parse()
     {
         const string app = """{"appId":413150,"name":"Stardew Valley","fastestCompletionTime":197,"medianCompletionTime":15674}""";
@@ -1093,18 +1131,30 @@ static class Tests
     public static void Session_TrackerReportsSessionsSeenFromTheStart()
     {
         var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
-        var tracker = new SessionTracker(runningAtStart: 7, t0.AddMinutes(-20));
-        Assert.Equal<PlaySession?>(null, tracker.Observe(0, t0));
-        Assert.Equal<PlaySession?>(null, tracker.Observe(5, t0.AddMinutes(1)));
-        Assert.Equal<PlaySession?>(null, tracker.Observe(5, t0.AddMinutes(30)));
-        Assert.Equal<PlaySession?>(new PlaySession(5, t0.AddMinutes(1), t0.AddMinutes(90)), tracker.Observe(9, t0.AddMinutes(90)));
-        Assert.Equal<PlaySession?>(new PlaySession(9, t0.AddMinutes(90), t0.AddMinutes(95)), tracker.Observe(0, t0.AddMinutes(95)));
+        var tracker = new SessionTracker([7], t0.AddMinutes(-20));
+        Assert.Equal(0, tracker.Observe([], t0).Count);
+        Assert.Equal(0, tracker.Observe([5], t0.AddMinutes(1)).Count);
+        Assert.Equal(0, tracker.Observe([5], t0.AddMinutes(30)).Count);
+        Assert.Equal(new PlaySession(5, t0.AddMinutes(1), t0.AddMinutes(90)), tracker.Observe([9], t0.AddMinutes(90)).Single());
+        Assert.Equal(new PlaySession(9, t0.AddMinutes(90), t0.AddMinutes(95)), tracker.Observe([], t0.AddMinutes(95)).Single());
 
         // All play seen is kept: a game running at the start counts from the app's start, the running one up to now.
         Assert.Equal(new PlaySession(7, t0.AddMinutes(-20), t0), tracker.Played(7, t0.AddMinutes(100)).Single());
-        tracker.Observe(5, t0.AddMinutes(120));
+        tracker.Observe([5], t0.AddMinutes(120));
         Assert.Equal("1-90,120-130", string.Join(",", tracker.Played(5, t0.AddMinutes(130))
             .Select(s => $"{(s.Start - t0).TotalMinutes}-{(s.End - t0).TotalMinutes}")));
+    }
+
+    public static void Session_TwoGamesAtOnce()
+    {
+        // A game, then Spacewar started by an online fix next to it: each has its own session.
+        var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
+        var tracker = new SessionTracker([], t0);
+        tracker.Observe([5], t0.AddMinutes(1));
+        Assert.Equal(0, tracker.Observe([5, 480], t0.AddMinutes(2)).Count);
+        Assert.True(tracker.IsRunning(5) && tracker.IsRunning(480), "both run");
+        Assert.Equal(new PlaySession(480, t0.AddMinutes(2), t0.AddMinutes(50)), tracker.Observe([5], t0.AddMinutes(50)).Single());
+        Assert.Equal(new PlaySession(5, t0.AddMinutes(1), t0.AddMinutes(60)), tracker.Played(5, t0.AddMinutes(60)).Single());
     }
 
     public static void Progress_PlayedSinceTheLastUnlock()
