@@ -1054,21 +1054,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         StatUnlockedSub = m > 0 ? Loc.T("game.unlockedSubManual", steamPct, m) : Loc.T("game.unlockedSub", steamPct);
 
         ShowRemaining();
-        var played = TimeEstimator.Format(_game.EffectivePlaytimeMinutes);
-        var steamPlayed = TimeEstimator.Format(_game.PlaytimeMinutes);
-        StatPlayed = played;
-        StatPlayedSub = _game.PlaytimeOverrideMinutes is not null ? Loc.T("game.playedManual")
-            : _game.PlaytimeOffsetMinutes > 0 ? Loc.T("game.playedOf", steamPlayed)
-            : Loc.T("game.playedSteam");
-        var playedNote = _game.PlaytimeOverrideMinutes is not null ? Loc.T("time.playedNoteManual")
-            : _game.PlaytimeOffsetMinutes > 0 ? Loc.T("time.playedNoteOf", steamPlayed)
-            : "";
-        CompletionText = _game.CompletionMinutes is { } cm
-            ? Loc.T("time.summaryKnown", TimeEstimator.Format(cm),
-                _game.CompletionSource == "manual" ? Loc.T("time.sourceManual") : _game.CompletionSource, played, playedNote)
-            : _game.DerivedCompletionMinutes is { } dm
-                ? Loc.T("time.summaryDerived", TimeEstimator.Format(dm), played, playedNote)
-                : Loc.T("time.summaryPlayed", played, playedNote);
+        ShowPlayed();
 
         SampleText = _game.SampleFetchedAt is { } sf
             ? Loc.Plural("time.sample", _game.SamplePlayers,
@@ -1204,6 +1190,30 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ShowHeadingNotes();
         UpdateOverlayLists(_rows);
         ShowRemaining();
+        ShowPlayed();
+    }
+
+    /// <summary>The played tile and the time summary: Steam's playtime goes on with the running session the app sees.</summary>
+    private void ShowPlayed()
+    {
+        if (_game is null) return;
+        var now = DateTimeOffset.Now;
+        var played = TimeEstimator.Format(Progress.PlaytimeNow(_game, now, _sessions.Played(_game.AppId, now)));
+        var steamPlayed = TimeEstimator.Format(_game.PlaytimeMinutes);
+        StatPlayed = played;
+        StatPlayedSub = _game.PlaytimeOverrideMinutes is not null ? Loc.T("game.playedManual")
+            : _game.PlaytimeOffsetMinutes > 0 ? Loc.T("game.playedOf", steamPlayed)
+            : _sessions.IsRunning(_game.AppId) ? Loc.T("game.playedNow")
+            : Loc.T("game.playedSteam");
+        var playedNote = _game.PlaytimeOverrideMinutes is not null ? Loc.T("time.playedNoteManual")
+            : _game.PlaytimeOffsetMinutes > 0 ? Loc.T("time.playedNoteOf", steamPlayed)
+            : "";
+        CompletionText = _game.CompletionMinutes is { } cm
+            ? Loc.T("time.summaryKnown", TimeEstimator.Format(cm),
+                _game.CompletionSource == "manual" ? Loc.T("time.sourceManual") : _game.CompletionSource, played, playedNote)
+            : _game.DerivedCompletionMinutes is { } dm
+                ? Loc.T("time.summaryDerived", TimeEstimator.Format(dm), played, playedNote)
+                : Loc.T("time.summaryPlayed", played, playedNote);
     }
 
     /// <summary>Time to 100% source, for the header.</summary>

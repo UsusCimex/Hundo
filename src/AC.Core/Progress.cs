@@ -154,6 +154,10 @@ public static class Progress
         if (history.Count > MaxPlaytimePoints) history.RemoveRange(0, history.Count - MaxPlaytimePoints);
     }
 
+    /// <summary>Playtime now: Steam's with the play the app saw that it does not show yet; manual corrections applied.</summary>
+    public static double PlaytimeNow(GameData game, DateTimeOffset now, IReadOnlyList<PlaySession>? played = null) =>
+        Points(game, now, played ?? [])[^1].Minutes;
+
     /// <summary>
     /// Known playtime moments, oldest first, ending with the current playtime; manual corrections applied.
     /// Sessions after the last point of the history go on top of it. Steam's playtime may show part of a running

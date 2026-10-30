@@ -40,6 +40,7 @@
   "game.playedManual": "задано вручную",
   "game.playedOf": "из {0} в Steam",
   "game.playedSteam": "по данным Steam",
+  "game.playedNow": "идёт игра",
 
   "toolbar.refresh": "Обновить статус",
   "toolbar.refreshTip": "Статус из источника, выбранного в настройках: Web API или клиент Steam",

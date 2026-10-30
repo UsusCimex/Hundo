@@ -1230,6 +1230,20 @@ static class Tests
         Assert.Equal(80.0, Math.Round(Progress.MinutesSinceProgress(g, t0.AddHours(1), running), 1));
     }
 
+    public static void Progress_PlaytimeNow()
+    {
+        // Steam's playtime goes on with the session the app sees, less the hours to ignore.
+        var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
+        var g = SampleGame();
+        g.PlaytimeHistory.Add(new PlaytimePoint { At = t0, Minutes = 300 });
+        g.PlaytimeMinutes = 300;
+        Assert.Equal(300.0, Progress.PlaytimeNow(g, t0.AddHours(1)));
+        var running = new[] { new PlaySession(1, t0, t0.AddHours(1)) };
+        Assert.Equal(360.0, Math.Round(Progress.PlaytimeNow(g, t0.AddHours(1), running), 1));
+        g.PlaytimeOffsetMinutes = 100;
+        Assert.Equal(260.0, Math.Round(Progress.PlaytimeNow(g, t0.AddHours(1), running), 1));
+    }
+
     public static void Progress_SessionStartJoinsTheHistory()
     {
         var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);

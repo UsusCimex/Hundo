@@ -40,6 +40,7 @@
   "game.playedManual": "set manually",
   "game.playedOf": "of {0} in Steam",
   "game.playedSteam": "from Steam",
+  "game.playedNow": "playing now",
 
   "toolbar.refresh": "Refresh status",
   "toolbar.refreshTip": "Status from the source chosen in settings: Web API or the Steam client",
