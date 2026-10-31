@@ -111,10 +111,13 @@ public sealed class AppSettings
     public bool Upgrade()
     {
         if (Format >= CurrentFormat) return false;
-        // The old defaults are crouch, sprint and strafe in many shooters: the overlay toggled mid-game.
-        if (OverlayToggleHotkey == "Ctrl+Shift+A") OverlayToggleHotkey = "Ctrl+Alt+H";
-        if (OverlayInteractHotkey == "Ctrl+Shift+S") OverlayInteractHotkey = "Ctrl+Alt+J";
+        // The old defaults are crouch, sprint and strafe in many shooters: the overlay toggled mid-game. A new default
+        // the other action already has is not given: Windows gives a combination to one hotkey only.
+        if (OverlayToggleHotkey == "Ctrl+Shift+A" && !Same(OverlayInteractHotkey, "Ctrl+Alt+H")) OverlayToggleHotkey = "Ctrl+Alt+H";
+        if (OverlayInteractHotkey == "Ctrl+Shift+S" && !Same(OverlayToggleHotkey, "Ctrl+Alt+J")) OverlayInteractHotkey = "Ctrl+Alt+J";
         Format = CurrentFormat;
         return true;
+
+        static bool Same(string a, string b) => string.Equals(a.Replace(" ", ""), b, StringComparison.OrdinalIgnoreCase);
     }
 }

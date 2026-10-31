@@ -1796,6 +1796,13 @@ static class Tests
             n.OverlayInteractHotkey = "Ctrl+Shift+S";
             fresh.SaveSettings(n);
             Assert.Equal("Ctrl+Shift+S", fresh.LoadSettings().OverlayInteractHotkey); // a new install's own choice
+
+            // The toggle took the new click-mode default before the update: the click mode keeps its old one.
+            var own = new AC.Infrastructure.JsonStore(Path.Combine(dir, "own"));
+            File.WriteAllText(Path.Combine(dir, "own", "settings.json"),
+                """{ "OverlayToggleHotkey": "Ctrl+Alt+J", "OverlayInteractHotkey": "Ctrl+Shift+S" }""");
+            var o = own.LoadSettings();
+            Assert.Equal("Ctrl+Alt+J|Ctrl+Shift+S", o.OverlayToggleHotkey + "|" + o.OverlayInteractHotkey);
         }
         finally
         {

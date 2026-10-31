@@ -102,13 +102,21 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        var combinations = new List<(uint, uint)>();
         foreach (var hk in new[] { ToggleHotkeyBox.Text, InteractHotkeyBox.Text })
         {
-            if (!HotkeyManager.TryParse(hk, out _, out _))
+            if (!HotkeyManager.TryParse(hk, out var mods, out var vk))
             {
                 MessageBox.Show(this, Loc.T("dialog.badHotkey", hk), Title);
                 return;
             }
+            combinations.Add((mods, vk));
+        }
+        // Windows gives a combination to one hotkey only: the second one would not work.
+        if (combinations[0] == combinations[1])
+        {
+            MessageBox.Show(this, Loc.T("dialog.sameHotkey"), Title);
+            return;
         }
 
         _svc.ApiKey = ApiKeyBox.Password;
