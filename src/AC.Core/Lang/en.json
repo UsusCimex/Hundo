@@ -31,6 +31,7 @@
   "game.unlockedSubManual": "{0}%, +{1} not counted",
   "game.noEstimate": "no estimate",
   "game.allDone": "all unlocked",
+  "game.noAchievements": "no achievements",
   "game.setInTime": "click to set it",
   "game.sourceManual": "set manually",
   "game.sourceSite": "from {0}",
@@ -151,6 +152,7 @@
 
   "plan.upTo": "up to {0}",
   "plan.complete": "All achievements unlocked",
+  "plan.noAchievements": "The game has no achievements, or Steam has not given their list",
   "plan.remaining": "About {0} to 100%",
   "plan.overdue": "To 100%: taking longer than estimated",
   "plan.pace": " at your pace ({0}x slower than a typical player)",

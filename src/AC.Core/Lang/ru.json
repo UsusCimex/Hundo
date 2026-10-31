@@ -31,6 +31,7 @@
   "game.unlockedSubManual": "{0}%, +{1} не засчитано",
   "game.noEstimate": "нет оценки",
   "game.allDone": "всё получено",
+  "game.noAchievements": "нет достижений",
   "game.setInTime": "нажми, чтобы задать",
   "game.sourceManual": "задано вручную",
   "game.sourceSite": "по {0}",
@@ -152,6 +153,7 @@
 
   "plan.upTo": "до {0}",
   "plan.complete": "Все достижения получены",
+  "plan.noAchievements": "У игры нет достижений, или Steam не отдал их список",
   "plan.remaining": "До 100% примерно {0}",
   "plan.overdue": "До 100%: дольше, чем по оценке",
   "plan.pace": " с учётом твоего темпа (в {0} раза медленнее типичного игрока)",

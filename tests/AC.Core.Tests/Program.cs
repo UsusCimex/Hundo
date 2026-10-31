@@ -248,6 +248,12 @@ static class Tests
         plan = Planner.Build(g, Percentile.P50);
         double expected = g.Estimates["misc"].P50!.Value + (g.Estimates["miss"].P50!.Value - g.Estimates["ch5"].P50!.Value);
         Assert.Equal(Math.Round(expected, 1), Math.Round(plan.RemainingMinutes!.Value, 1));
+        Assert.True(!plan.IsComplete, "not all done");
+
+        // All done is complete; a game without achievements (or before their list came) is not.
+        foreach (var a in g.Achievements) g.StateOf(a.ApiName).SteamUnlocked = true;
+        Assert.True(Planner.Build(g, Percentile.P50).IsComplete, "all done");
+        Assert.True(!Planner.Build(new GameData { AppId = 2 }, Percentile.P50).IsComplete, "no achievements");
     }
 
     public static void Planner_IdlePlaytimeChangesNothing()

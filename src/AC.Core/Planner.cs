@@ -26,8 +26,11 @@ public sealed record Plan(
     /// <summary>Flat playthrough order.</summary>
     public IEnumerable<AchievementRow> Ordered => Sections.SelectMany(s => s.Groups).SelectMany(g => g.Items);
 
-    /// <summary>Nothing left to unlock.</summary>
-    public bool IsComplete => Sections.Count == 0;
+    /// <summary>Achievements in the game: none when it has none, or their list has not come yet.</summary>
+    public int Total { get; init; }
+
+    /// <summary>Nothing left to unlock, of at least one.</summary>
+    public bool IsComplete => Total > 0 && Sections.Count == 0;
 
     /// <summary>Time left to each locked achievement ahead with an estimate (<see cref="Planner.TimeLeft"/>).</summary>
     public IReadOnlyDictionary<string, double> TimeLeft { get; init; } = new Dictionary<string, double>();
@@ -154,7 +157,8 @@ public static class Planner
         var wide = p == Percentile.P90 ? left : TimeLeft(GameLogic.BuildRows(game, Percentile.P90), Percentile.P90, pace).Left;
         var passed = open.Where(r => r.Passed).Select(r => r.ApiName).ToHashSet(StringComparer.Ordinal);
         double? remaining = left.Count > 0 ? left.Values.Max() + deferred : open.Any(r => r.Passed && r.EstimateMinutes.HasValue) ? deferred : null;
-        return new Plan(sections, remaining, unknown, pace) { TimeLeft = left, WideTimeLeft = wide, Passed = passed, Deferred = deferred };
+        return new Plan(sections, remaining, unknown, pace)
+            { Total = rows.Count, TimeLeft = left, WideTimeLeft = wide, Passed = passed, Deferred = deferred };
     }
 
     /// <summary>

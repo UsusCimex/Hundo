@@ -1197,6 +1197,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (_game is null || _plan is not { } plan) return;
         var left = plan.RemainingAfter(_played);
         RemainingText = plan.IsComplete ? Loc.T("plan.complete")
+            : plan.Total == 0 ? Loc.T("plan.noAchievements")
             : left is { Minutes: { } rem }
                 ? Loc.T("plan.remaining", TimeEstimator.Format(rem)) +
                   (plan.Pace > 1.05 ? Loc.T("plan.pace", Number(plan.Pace, "0.#")) : "") +
@@ -1208,6 +1209,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             : left is { Minutes: { } rm } ? "~" + TimeEstimator.Format(rm)
             : Loc.T(left is not null ? "estimate.overdue" : "game.noEstimate");
         StatRemainingSub = plan.IsComplete ? Loc.T("game.allDone")
+            : plan.Total == 0 ? Loc.T("game.noAchievements")
             : left is null ? Loc.T("game.setInTime")
             : CompletionSourceTitle(_game);
     }
