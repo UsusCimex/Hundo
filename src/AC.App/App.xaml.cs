@@ -22,11 +22,13 @@ public partial class App : Application
         var name = "AchievementCompanion." +
                    Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(AppPaths.DataRoot.ToLowerInvariant())))[..16];
         _single = new Mutex(true, name, out bool first);
+        bool inTray = e.Args.Contains(TrayArg);
         if (!first)
         {
             _single.Dispose();
             _single = null;
-            ActivateRunningCopy(name);
+            // A start in the tray, a second start with Windows say, has nothing to show.
+            if (!inTray) ActivateRunningCopy(name);
             Shutdown();
             return;
         }
@@ -54,7 +56,6 @@ public partial class App : Application
         ThemeManager.Apply(settings.Theme);
         ImageCache.TrimInBackground();
         base.OnStartup(e);
-        bool inTray = e.Args.Contains(TrayArg);
         var window = new MainWindow(inTray);
         if (!inTray) window.Show();
     }
