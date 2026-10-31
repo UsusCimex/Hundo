@@ -1727,7 +1727,7 @@ static class Tests
         var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
         var now = t0;
         IReadOnlySet<uint> running = new HashSet<uint> { 7 };
-        var watch = new AC.Infrastructure.PlayWatch(() => running, () => now);
+        var watch = new AC.Infrastructure.PlayWatch(() => running, () => now, _ => false);
         string Look(uint[] apps, int seconds)
         {
             running = apps.ToHashSet();
@@ -1757,6 +1757,33 @@ static class Tests
         // Started again, a game has no last session.
         Assert.Equal("5|", Look([5], 30));
         Assert.Equal<PlaySession?>(null, watch.LastSession(5));
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Session_SteamClientReadIsNotAStart()
+    {
+        // Steam names a game as running while the app reads or writes it through the Steam client.
+        var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
+        var now = t0;
+        IReadOnlySet<uint> running = new HashSet<uint>();
+        bool helper = false;
+        var watch = new AC.Infrastructure.PlayWatch(() => running, () => now, id => helper && id == 7);
+        watch.StartAsync().GetAwaiter().GetResult();
+        string Look(uint[] apps, bool helperOn, int seconds)
+        {
+            running = apps.ToHashSet();
+            helper = helperOn;
+            now = t0.AddSeconds(seconds);
+            watch.LookAsync().GetAwaiter().GetResult();
+            if (!watch.HasChanges) return "none";
+            var c = watch.TakeChanges();
+            return string.Join(",", c.Started) + "|" + string.Join(",", c.Stopped);
+        }
+        Assert.Equal("none", Look([7], true, 5));
+        Assert.Equal("none", Look([], false, 10));
+        Assert.Equal("7|", Look([7], false, 15));
+        Assert.Equal("none", Look([7], true, 20)); // a read while the game runs: it runs on
+        Assert.Equal("|7", Look([], false, 25));
     }
 
     public static void Session_SleepIsNotPlay()

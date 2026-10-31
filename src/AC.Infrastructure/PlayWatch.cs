@@ -10,8 +10,9 @@ public sealed record PlayChanges(IReadOnlyList<uint> Started, IReadOnlyList<uint
 /// Looks up the running games off the UI thread and follows the sessions played in them. The changes between looks
 /// wait until the caller can act on them, so a game started and closed while it was busy is not lost.
 /// </summary>
+/// <param name="helperUses">The app uses the game through the Steam client (<see cref="BridgeClient.InUse"/>).</param>
 [SupportedOSPlatform("windows")]
-public sealed class PlayWatch(Func<IReadOnlySet<uint>> scan, Func<DateTimeOffset> clock)
+public sealed class PlayWatch(Func<IReadOnlySet<uint>> scan, Func<DateTimeOffset> clock, Func<uint, bool> helperUses)
 {
     private bool _scanning;
     private bool _scanFailed;
@@ -20,7 +21,7 @@ public sealed class PlayWatch(Func<IReadOnlySet<uint>> scan, Func<DateTimeOffset
     private readonly List<PlaySession> _ended = new();
     private readonly Dictionary<uint, PlaySession> _lastSessions = new();
 
-    public PlayWatch() : this(SteamLocal.RunningAppIds, () => DateTimeOffset.Now) { }
+    public PlayWatch() : this(SteamLocal.RunningAppIds, () => DateTimeOffset.Now, BridgeClient.InUse) { }
 
     /// <summary>Started over by the first look, when the window opens.</summary>
     public SessionTracker Sessions { get; private set; } = new([], clock());
@@ -36,7 +37,10 @@ public sealed class PlayWatch(Func<IReadOnlySet<uint>> scan, Func<DateTimeOffset
     /// <summary>A look at the running games; null - the previous look still runs, or this one failed (logged once).</summary>
     public async Task<IReadOnlySet<uint>?> LookAsync()
     {
-        if (_scanning || await ScanAsync() is not { } running) return null;
+        if (_scanning || await ScanAsync() is not { } scanned) return null;
+        // While the app reads or writes a game through the Steam client, Steam names that game as running: not a start
+        // of the game, unless it was running already.
+        IReadOnlySet<uint> running = scanned.Where(a => _running.Contains(a) || !helperUses(a)).ToHashSet();
         // Every look, whether the changes are taken or not: starts and ends are stamped when seen, and a pause between
         // looks is taken for sleep.
         _ended.AddRange(Sessions.Observe(running, clock()));

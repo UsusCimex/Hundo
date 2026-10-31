@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using System.Text;
@@ -51,6 +52,9 @@ public sealed class BridgeClient
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
     private static readonly SemaphoreSlim OneAtATime = new(1, 1);
+    // Until when the helper uses a game: Steam names it as running meanwhile, and a moment after.
+    private static readonly ConcurrentDictionary<uint, DateTimeOffset> InUseUntil = new();
+    private static readonly TimeSpan NamedAfterExit = TimeSpan.FromSeconds(10);
 
     public string ExePath { get; }
     private readonly bool _standIn;
@@ -83,22 +87,26 @@ public sealed class BridgeClient
     /// <summary>The helper can run; AC_NO_STEAM_CLIENT=1 turns the real one off (scripted checks must not touch Steam).</summary>
     public bool Exists => File.Exists(ExePath) && (_standIn || Environment.GetEnvironmentVariable("AC_NO_STEAM_CLIENT") != "1");
 
+    /// <summary>The helper uses the game now or did a moment ago, so Steam names it as running.</summary>
+    public static bool InUse(uint appId) => InUseUntil.TryGetValue(appId, out var until) && DateTimeOffset.UtcNow < until;
+
     public Task<BridgeResultDto> ReadAsync(uint appId, string language, CancellationToken ct = default) =>
-        RunAsync(["read", appId.ToString(), "--lang", language], ct);
+        RunAsync(appId, ["read", appId.ToString(), "--lang", language], ct);
 
     public Task<BridgeResultDto> UnlockAsync(uint appId, IEnumerable<string> apiNames, CancellationToken ct = default) =>
-        RunAsync(["unlock", appId.ToString(), .. apiNames], ct);
+        RunAsync(appId, ["unlock", appId.ToString(), .. apiNames], ct);
 
     public Task<BridgeResultDto> LockAsync(uint appId, IEnumerable<string> apiNames, CancellationToken ct = default) =>
-        RunAsync(["lock", appId.ToString(), .. apiNames], ct);
+        RunAsync(appId, ["lock", appId.ToString(), .. apiNames], ct);
 
-    private async Task<BridgeResultDto> RunAsync(string[] args, CancellationToken ct)
+    private async Task<BridgeResultDto> RunAsync(uint appId, string[] args, CancellationToken ct)
     {
         if (!Exists)
             return new BridgeResultDto { Ok = false, Error = Loc.T("error.bridgeMissing", ExePath) };
 
         // Steam takes the process for a game: no point in two helpers at once.
         await OneAtATime.WaitAsync(ct);
+        InUseUntil[appId] = DateTimeOffset.MaxValue;
         try
         {
             var psi = new ProcessStartInfo(ExePath)
@@ -147,6 +155,7 @@ public sealed class BridgeClient
         }
         finally
         {
+            InUseUntil[appId] = DateTimeOffset.UtcNow + NamedAfterExit;
             OneAtATime.Release();
         }
     }
