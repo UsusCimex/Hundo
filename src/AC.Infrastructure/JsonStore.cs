@@ -136,12 +136,18 @@ public sealed class JsonStore
         }
     }
 
-    /// <summary>Writes through a temp file so a failure does not leave truncated JSON.</summary>
+    /// <summary>
+    /// Writes through a temp file, flushed to the disk before it replaces the old one: neither a failure nor a power
+    /// cut right after the save leaves a truncated or empty file.
+    /// </summary>
     private static void Write<T>(string path, T value)
     {
         var tmp = path + ".tmp";
         using (var fs = File.Create(tmp))
+        {
             JsonSerializer.Serialize(fs, value, StoreJson.Pretty);
+            fs.Flush(flushToDisk: true);
+        }
         File.Move(tmp, path, overwrite: true);
     }
 }
