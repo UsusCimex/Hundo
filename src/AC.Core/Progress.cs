@@ -92,7 +92,7 @@ public static class Progress
     /// Minutes played since the last unlock or mark, from the start of the game when there is none. Only play known to
     /// come after it counts: between two known moments the play is taken to start as early as it can.
     /// </summary>
-    /// <param name="played">The play the app saw (<see cref="SessionTracker.Played"/>): Steam's playtime shows a session only after it ends.</param>
+    /// <param name="played">The play the app saw (<see cref="SessionTracker.Played"/>): Steam's playtime shows it only up to when it was read.</param>
     public static double MinutesSinceProgress(GameData game, DateTimeOffset now, IReadOnlyList<PlaySession>? played = null)
     {
         DateTimeOffset? last = null;
@@ -160,19 +160,25 @@ public static class Progress
 
     /// <summary>
     /// Known playtime moments, oldest first, ending with the current playtime; manual corrections applied.
-    /// Sessions after the last point of the history go on top of it. Steam's playtime may show part of a running
-    /// session already, so only what it shows beyond them is play the app did not see, taken to come first.
+    /// The playtime known now counts the play up to when it was read from Steam, mid-session too (the user's own, up
+    /// to when it was set): the sessions the app saw after that go on top of it. When that moment is unknown, the
+    /// sessions after the last point of the history do.
     /// </summary>
     private static List<PlaytimePoint> Points(GameData game, DateTimeOffset now, IReadOnlyList<PlaySession> played)
     {
-        var raw = new List<PlaytimePoint>();
-        if (game.PlaytimeOverrideMinutes is null) raw.AddRange(game.PlaytimeHistory.Where(p => p.At < now).OrderBy(p => p.At));
-        double counted = game.PlaytimeOverrideMinutes ?? game.PlaytimeMinutes, extra = 0;
-        var since = raw.Count > 0 ? raw[^1].At : DateTimeOffset.MinValue;
+        bool own = game.PlaytimeOverrideMinutes is not null;
+        var raw = own ? new List<PlaytimePoint>() : game.PlaytimeHistory.Where(p => p.At < now).OrderBy(p => p.At).ToList();
+        double from = game.PlaytimeOverrideMinutes ?? game.PlaytimeMinutes, extra = 0;
+        var since = (own ? game.PlaytimeOverrideAt : game.PlaytimeReadAt) ?? DateTimeOffset.MinValue;
+        if (since > now) since = now;
+        if (raw.Count > 0)
+        {
+            from = Math.Max(from, raw[^1].Minutes);
+            if (since > raw[^1].At) raw.Add(new PlaytimePoint { At = since, Minutes = from });
+            else since = raw[^1].At;
+        }
         var sessions = played.Where(s => s.End > since && s.Start < now).OrderBy(s => s.Start)
             .Select(s => (Start: s.Start > since ? s.Start : since, End: s.End < now ? s.End : now)).ToList();
-        double sessionMinutes = sessions.Sum(s => (s.End - s.Start).TotalMinutes);
-        double from = raw.Count > 0 ? Math.Max(raw[^1].Minutes, counted - sessionMinutes) : counted;
         foreach (var (start, end) in sessions)
         {
             raw.Add(new PlaytimePoint { At = start, Minutes = from + extra });

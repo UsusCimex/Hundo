@@ -121,11 +121,15 @@ public sealed class GameData
     public string Name { get; set; } = "";
     /// <summary>Playtime according to Steam.</summary>
     public int PlaytimeMinutes { get; set; }
+    /// <summary>When PlaytimeMinutes was read from Steam: mid-session it counts the session up to about then. null - unknown.</summary>
+    public DateTimeOffset? PlaytimeReadAt { get; set; }
     /// <summary>
     /// The user's own "actually played" minutes. When set, replaces the Steam figure
     /// (for example, lots of AFK or part of the game played in another version).
     /// </summary>
     public double? PlaytimeOverrideMinutes { get; set; }
+    /// <summary>When the own minutes were set: the play seen after that goes on top of them.</summary>
+    public DateTimeOffset? PlaytimeOverrideAt { get; set; }
     /// <summary>
     /// Minutes of Steam playtime to ignore: hours before the game got achievements,
     /// or AFK. Applies only when PlaytimeOverrideMinutes is not set.

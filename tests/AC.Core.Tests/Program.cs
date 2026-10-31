@@ -1247,20 +1247,47 @@ static class Tests
 
     public static void Progress_SteamCountsARunningSession()
     {
-        // 300 minutes at 18:00, then a session from 18:00. Read again mid-session, Steam's playtime shows 50 of its
-        // minutes already: at 19:00 an hour has passed since the unlock, not 110 minutes.
+        // 300 minutes at 18:00, then a session from 18:00. Read again at 18:50, Steam's playtime shows those 50 minutes
+        // already: at 19:00 an hour has passed since the unlock, not 110 minutes.
         var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
         var g = SampleGame();
         g.PlaytimeHistory.Add(new PlaytimePoint { At = t0, Minutes = 300 });
         g.PlaytimeMinutes = 350;
+        g.PlaytimeReadAt = t0.AddMinutes(50);
         g.StateOf("ch1").SteamUnlocked = true;
         g.StateOf("ch1").SteamUnlockTime = t0.AddMinutes(-10);
         var running = new[] { new PlaySession(1, t0, t0.AddHours(1)) };
         Assert.Equal(60.0, Math.Round(Progress.MinutesSinceProgress(g, t0.AddHours(1), running), 1));
+        Assert.Equal(360.0, Math.Round(Progress.PlaytimeNow(g, t0.AddHours(1), running), 1));
 
         // Steam's playtime beyond the session is play the app did not see.
         g.PlaytimeMinutes = 380;
-        Assert.Equal(80.0, Math.Round(Progress.MinutesSinceProgress(g, t0.AddHours(1), running), 1));
+        Assert.Equal(90.0, Math.Round(Progress.MinutesSinceProgress(g, t0.AddHours(1), running), 1));
+    }
+
+    public static void Progress_AppStartedAfterTheGame()
+    {
+        // 300 minutes at 17:00; the game started a little later. The app starts at 19:00 and reads 355 from Steam, so
+        // those minutes are counted already: the session it sees from 19:00 goes on top of them.
+        var t0 = new DateTimeOffset(2026, 10, 1, 19, 0, 0, TimeSpan.Zero);
+        var g = SampleGame();
+        g.PlaytimeHistory.Add(new PlaytimePoint { At = t0.AddHours(-2), Minutes = 300 });
+        g.PlaytimeMinutes = 355;
+        g.PlaytimeReadAt = t0;
+        g.StateOf("ch1").SteamUnlocked = true;
+        g.StateOf("ch1").SteamUnlockTime = t0.AddHours(-3);
+        var seen = new[] { new PlaySession(1, t0, t0.AddMinutes(30)) };
+        Assert.Equal(385.0, Math.Round(Progress.PlaytimeNow(g, t0.AddMinutes(30), seen), 1));
+        Assert.Equal(85.0, Math.Round(Progress.MinutesSinceProgress(g, t0.AddMinutes(30), seen), 1));
+
+        // The same with no history yet: the first load of the game is mid-session.
+        g.PlaytimeHistory.Clear();
+        Assert.Equal(385.0, Math.Round(Progress.PlaytimeNow(g, t0.AddMinutes(30), seen), 1));
+
+        // The user's own playtime counts the play up to when it was set.
+        g.PlaytimeOverrideMinutes = 3000;
+        g.PlaytimeOverrideAt = t0.AddMinutes(20);
+        Assert.Equal(3010.0, Math.Round(Progress.PlaytimeNow(g, t0.AddMinutes(30), seen), 1));
     }
 
     public static void Progress_PlaytimeNow()

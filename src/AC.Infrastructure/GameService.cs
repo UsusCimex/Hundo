@@ -112,7 +112,11 @@ public sealed class GameService
 
         var lib = CachedLibrary().FirstOrDefault(g => g.AppId == appId);
         // Steam playtime only grows: an old library cache must not undo a fresher value saved with the game.
-        if (lib != null) game.PlaytimeMinutes = Math.Max(game.PlaytimeMinutes, lib.PlaytimeMinutes);
+        if (lib != null && lib.PlaytimeMinutes > game.PlaytimeMinutes)
+        {
+            game.PlaytimeMinutes = lib.PlaytimeMinutes;
+            game.PlaytimeReadAt = null;
+        }
 
         bool stale = forceSchema || game.Achievements.Count == 0 || game.SchemaFetchedAt is null ||
                      DateTimeOffset.Now - game.SchemaFetchedAt > SchemaTtl ||
@@ -235,10 +239,11 @@ public sealed class GameService
         RequireKey();
         var own = await _api.GetOwnedGameAsync(ApiKey, Settings.SteamId64, game.AppId, ct);
         if (own is null) return;
+        var now = DateTimeOffset.Now;
         game.PlaytimeMinutes = own.PlaytimeMinutes;
+        game.PlaytimeReadAt = now;
         if (!running)
         {
-            var now = DateTimeOffset.Now;
             Progress.AddPlaytime(game, now.AddDays(-14), own.PlaytimeMinutes - own.Playtime2WeeksMinutes);
             if (session is not null && session.AppId == game.AppId) Progress.AddSessionStart(game, session, own.PlaytimeMinutes);
             Progress.AddPlaytime(game, now, own.PlaytimeMinutes);
@@ -313,7 +318,9 @@ public sealed class GameService
     /// <summary>Own "actually played" time (null - from Steam) and Steam hours to ignore.</summary>
     public void SetPlaytime(GameData game, double? overrideMinutes, double offsetMinutes)
     {
-        game.PlaytimeOverrideMinutes = overrideMinutes is >= 0 ? overrideMinutes : null;
+        overrideMinutes = overrideMinutes is >= 0 ? overrideMinutes : null;
+        if (overrideMinutes != game.PlaytimeOverrideMinutes) game.PlaytimeOverrideAt = overrideMinutes is null ? null : DateTimeOffset.Now;
+        game.PlaytimeOverrideMinutes = overrideMinutes;
         game.PlaytimeOffsetMinutes = Math.Max(0, offsetMinutes);
         _store.SaveGame(game);
     }
