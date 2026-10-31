@@ -409,6 +409,12 @@ static class Tests
         Assert.True(lines[1].Contains(";50,0;"), lines[1]);
         var comma = Encoding.UTF8.GetString(Exporter.ToCsv(g, ExportScope.ManualOnly, ',')).Split(Environment.NewLine)[1];
         Assert.True(comma.Contains(",50.0,"), comma);
+
+        // A text that starts like a formula stays text in Excel.
+        g.StateOf("misc").Note = "=HYPERLINK(\"http://x/\";\"open\")";
+        g.Achievements.Single(a => a.ApiName == "misc").Name = "@sum";
+        var formula = Encoding.UTF8.GetString(Exporter.ToCsv(g, ExportScope.ManualOnly)).Split(Environment.NewLine)[1];
+        Assert.True(formula.Contains(";'@sum;") && formula.EndsWith(";\"'=HYPERLINK(\"\"http://x/\"\";\"\"open\"\")\""), formula);
     }
 
     public static void TagPack_RoundTrip()

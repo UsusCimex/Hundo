@@ -84,6 +84,8 @@ public static class Exporter
 
     private static string Escape(string value, char sep)
     {
+        // Excel runs a cell that starts like a formula; names come from game developers, notes from shared tags files.
+        if (value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r') value = "'" + value;
         if (value.IndexOfAny(new[] { sep, '"', '\n', '\r' }) < 0) return value;
         return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
