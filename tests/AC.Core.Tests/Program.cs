@@ -630,6 +630,18 @@ static class Tests
         Assert.True(AC.Infrastructure.UpdateService.Parse(json.Replace("setup.exe", "setup.msi"), new Version(0, 1, 0), installed: true) is null, "no setup");
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Steam_SignedInToAnotherAccount()
+    {
+        // The helper acts as whoever is signed in to the Steam client: only the account in the settings may be used.
+        const ulong mine = 76561198000000000UL;
+        uint account = (uint)(mine - 76561197960265728UL);
+        Assert.True(!AC.Infrastructure.GameService.OtherAccount(account, mine), "the same account");
+        Assert.True(AC.Infrastructure.GameService.OtherAccount(account + 1, mine), "another account");
+        Assert.True(!AC.Infrastructure.GameService.OtherAccount(0, mine), "Steam not running: unknown");
+        Assert.True(!AC.Infrastructure.GameService.OtherAccount(account + 1, 0), "no account in the settings");
+    }
+
     public static void Vdf_LoginUsers()
     {
         const string vdf = """

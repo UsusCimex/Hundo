@@ -45,6 +45,10 @@ public static class SteamLocal
     /// <summary>The game Steam names as running in the registry; 0 - none.</summary>
     public static uint NamedAppId() => Registry.GetValue(SteamKey, "RunningAppID", 0) is int id and > 0 ? (uint)id : 0;
 
+    /// <summary>The account signed in to the Steam client now; 0 - none, or Steam is not running.</summary>
+    public static uint SignedInAccountId() =>
+        Registry.GetValue(SteamKey + @"\ActiveProcess", "ActiveUser", 0) is int id ? unchecked((uint)id) : 0;
+
     private sealed record InstalledCache(DateTime At, IReadOnlyDictionary<uint, string> Games);
     private static InstalledCache? _installed;
     private static readonly TimeSpan InstalledTtl = TimeSpan.FromMinutes(5);

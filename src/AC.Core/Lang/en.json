@@ -439,6 +439,7 @@
   "error.skippedProtected": "skipped protected: {0}",
   "error.protectedOne": "the achievement is protected: Steam accepts it only from the game server",
   "error.manualOff": "manual marks and writing to Steam are turned off in settings",
+  "error.otherAccount": "Steam is signed in to another account than the one in Settings: nothing is read or written through it",
   "error.noKey": "No Web API key (Settings)",
   "error.noSteamId": "No SteamID64 (Settings)",
   "error.noLibrary": "Steam returned no library: the profile is private or the key belongs to another account",

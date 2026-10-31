@@ -328,6 +328,7 @@ public sealed class GameService
     /// <summary>Status and schema via the helper (works with private profiles, shows "in game" for a second).</summary>
     public async Task<(IReadOnlyList<string> Fresh, string? Error)> RefreshViaBridgeAsync(GameData game, CancellationToken ct = default)
     {
+        if (SignedInElsewhere() is { } other) return (Array.Empty<string>(), other);
         var r = await _bridge.ReadAsync(game.AppId, ContentLanguage, ct);
         if (!r.Ok || r.Achievements is null) return (Array.Empty<string>(), r.Error ?? Loc.T("error.bridge"));
 
@@ -637,8 +638,20 @@ public sealed class GameService
         return last?.Action == "unlock";
     }
 
+    /// <summary>
+    /// The helper reads and writes as whoever is signed in to the Steam client: another account than the one in the
+    /// settings would get the marks, and its status would mix into this one's. null - the same, or nothing to compare.
+    /// </summary>
+    private string? SignedInElsewhere() =>
+        OtherAccount(SteamLocal.SignedInAccountId(), Settings.SteamId64) ? Loc.T("error.otherAccount") : null;
+
+    /// <summary>The Steam client is signed in to an account, and not to this one; false - the same, or unknown.</summary>
+    internal static bool OtherAccount(uint signedIn, ulong steamId64) =>
+        signedIn != 0 && steamId64 != 0 && signedIn != SteamLocal.AccountId(steamId64);
+
     private async Task<MarkReport> WriteToSteamAsync(GameData game, IReadOnlyList<string> names, bool unlock, CancellationToken ct)
     {
+        if (SignedInElsewhere() is { } other) return new MarkReport(false, other);
         var r = unlock ? await _bridge.UnlockAsync(game.AppId, names, ct) : await _bridge.LockAsync(game.AppId, names, ct);
         var now = DateTimeOffset.Now;
         var action = unlock ? "unlock" : "lock";
