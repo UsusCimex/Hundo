@@ -55,8 +55,11 @@ public sealed record GuideTip(ulong GuideId, string GuideTitle, string Author, s
 /// <summary>Tips for a game's achievements from Steam Community guides, kept on disk.</summary>
 public sealed class GuideTips
 {
-    /// <summary>Tips kept in an older format are read again: before it, tips quoted picture tags as text.</summary>
-    public const int CurrentFormat = 2;
+    /// <summary>
+    /// Tips kept in an older format are read again: before 2, tips quoted picture tags as text; before 3, they kept
+    /// pictures over plain http and from local addresses.
+    /// </summary>
+    public const int CurrentFormat = 3;
 
     public int Format { get; set; }
     /// <summary>The content language the guides were picked for.</summary>
@@ -133,7 +136,7 @@ public static partial class GuideParser
                 int total = segments.Sum(s => s.Text.Trim().Length);
                 double Share(Func<(string Text, bool Bold, bool Under), bool> f) =>
                     total == 0 ? 0 : (double)segments.Where(f).Sum(s => s.Text.Trim().Length) / total;
-                pictures.AddRange(Link().Matches(text).Select(l => l.Value.TrimEnd('.', ',', ';', ':', '!', '?', ')')).Where(LinksPicture));
+                pictures.AddRange(Link().Matches(text).Select(l => LinkedPicture(l.Value.TrimEnd('.', ',', ';', ':', '!', '?', ')'))).OfType<string>());
                 lines.Add(new GuideLine(text, lineHeading, Share(s => s.Bold), Share(s => s.Under), media, lineItem)
                     { Pictures = pictures.Distinct().ToList() });
             }
@@ -216,17 +219,17 @@ public static partial class GuideParser
                     Start();
                     media++;
                     int end = bbcode.IndexOf("[/img]", i, StringComparison.OrdinalIgnoreCase);
-                    if (end >= 0 && Shows(bbcode[i..end].Trim())) pictures.Add(bbcode[i..end].Trim());
+                    if (end >= 0 && Picture(bbcode[i..end].Trim()) is { } img) pictures.Add(img);
                     i = end < 0 ? bbcode.Length : end + "[/img]".Length;
                     break;
                 case "screenshot" when !close:
                     Start();
                     media++;
-                    if (fields.Length >= 3 && Shows(fields[2].Trim())) pictures.Add(fields[2].Trim());
+                    if (fields.Length >= 3 && Picture(fields[2].Trim()) is { } shot) pictures.Add(shot);
                     SkipCaption("[/screenshot]");
                     break;
-                case "url" when !close && LinksPicture(fields[0].Trim()):
-                    pictures.Add(fields[0].Trim());
+                case "url" when !close && LinkedPicture(fields[0].Trim()) is { } linked:
+                    pictures.Add(linked);
                     break;
                 // An icon's text is a label beside it.
                 case var preview when !close && preview.StartsWith("preview", StringComparison.Ordinal):
@@ -262,15 +265,23 @@ public static partial class GuideParser
         "table", "tr", "th", "td", "img", "screenshot", "h1", "h2", "h3",
     };
 
-    /// <summary>A picture to show: a web address, but not of Steam's achievement and game icons.</summary>
-    private static bool Shows(string url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" &&
-        !uri.AbsolutePath.Contains("/public/images/apps/", StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// The address of a picture to show, null - not one: Steam's achievement and game icons are left out. The app
+    /// fetches it itself from a stranger's guide, so only over https (a plain http one is asked over https) and from
+    /// a named host on the usual port, not an address in the local network such as the router's.
+    /// </summary>
+    private static string? Picture(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || !uri.IsDefaultPort) return null;
+        if (uri.HostNameType != UriHostNameType.Dns || !uri.Host.Contains('.')) return null;
+        if (uri.AbsolutePath.Contains("/public/images/apps/", StringComparison.OrdinalIgnoreCase)) return null;
+        return uri.Scheme == Uri.UriSchemeHttps ? url : new UriBuilder(uri) { Scheme = Uri.UriSchemeHttps, Port = -1 }.Uri.AbsoluteUri;
+    }
 
-    /// <summary>A link that leads to a picture rather than a page: by the file type or the host.</summary>
-    private static bool LinksPicture(string url) =>
-        Shows(url) && Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
-        (PictureFile().IsMatch(uri.AbsolutePath) || PictureHosts.Contains(uri.Host));
+    /// <summary>A link that leads to a picture rather than a page, by the file type or the host: its address to fetch.</summary>
+    private static string? LinkedPicture(string url) =>
+        Picture(url) is { } picture && Uri.TryCreate(picture, UriKind.Absolute, out var uri) &&
+        (PictureFile().IsMatch(uri.AbsolutePath) || PictureHosts.Contains(uri.Host)) ? picture : null;
 
     private static readonly HashSet<string> PictureHosts = new(StringComparer.OrdinalIgnoreCase)
         { "steamuserimages-a.akamaihd.net", "images.steamusercontent.com", "i.imgur.com" };

@@ -78,7 +78,8 @@ internal static class ImageCache
     private const long DiskLimitBytes = 300L * 1024 * 1024;
     private const long DiskTrimToBytes = 200L * 1024 * 1024;
 
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
+    // A picture from a stranger's guide may be anything: a bigger answer is dropped, not kept in memory.
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20), MaxResponseContentBufferSize = 20 * 1024 * 1024 };
     private static readonly Dictionary<string, BitmapSource> Memory = new();
     private static readonly Dictionary<string, Task<byte[]?>> Downloads = new();
     private static readonly Dictionary<string, DateTime> Failed = new();

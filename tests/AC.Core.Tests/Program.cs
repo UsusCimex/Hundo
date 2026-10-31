@@ -946,6 +946,20 @@ static class Tests
         Assert.True(!GuideParser.WorthShowing(240, 240) && !GuideParser.WorthShowing(536, 91), "icons and pop-up banners");
     }
 
+    public static void Guides_PicturesOnlyFromTheWeb()
+    {
+        // The app fetches them itself: over https, from named hosts, not from the local network.
+        var lines = GuideParser.Lines("""
+            [img]http://i.imgur.com/old.png[/img]
+            [img]http://192.168.0.1/apply.cgi?dns=1.2.3.4[/img]
+            [img]https://router/admin.png[/img]
+            [img]https://example.com:8080/a.png[/img]
+            [img]file:///C:/Windows/win.ini[/img]
+            See http://example.com/route.jpg
+            """, []);
+        Assert.Equal("https://i.imgur.com/old.png,https://example.com/route.jpg", string.Join(",", lines.SelectMany(l => l.Pictures)));
+    }
+
     public static void Guides_QuotesTheAchievementsEntry()
     {
         var section = new GuideSection("7", "Story", GuideParser.Lines("""
