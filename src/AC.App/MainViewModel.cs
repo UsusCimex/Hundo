@@ -28,8 +28,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string? _tickError;
     /// <summary>Sessions that ended while something loaded: they are acted on once it is done.</summary>
     private readonly List<PlaySession> _ended = new();
-    /// <summary>The last session seen from its start: its summary stays until dismissed or the next session starts.</summary>
-    private PlaySession? _lastSession;
+    /// <summary>
+    /// The last session of each game seen from its start: its summary stays until dismissed or the game starts again.
+    /// </summary>
+    private readonly Dictionary<uint, PlaySession> _lastSessions = new();
     private int _loadSeq;
     private int _busyCount;
     private string _completionFetchedText = "";
@@ -77,7 +79,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OverlayHideCommand = new RelayCommand(p => { if (p is AchievementRowViewModel r) r.InOverlay = false; });
         DownloadUpdateCommand = new RelayCommand(() => OpenUrl(_update?.DownloadUrl), () => _update != null);
         UpdateNotesCommand = new RelayCommand(() => OpenUrl(_update?.PageUrl), () => _update != null);
-        CloseSessionCommand = new RelayCommand(() => { _lastSession = null; UpdateSession(); });
+        CloseSessionCommand = new RelayCommand(() => { if (_game is { } g) _lastSessions.Remove(g.AppId); UpdateSession(); });
         CloseTimeCommand = new RelayCommand(() => IsTimeOpen = false);
         OpenGuideTipCommand = new RelayCommand(p => OpenUrl(p is AchievementRowViewModel r ? GuideTipFor(r.ApiName)?.Url : null));
         TranslateTipCommand = new AsyncCommand(p => TranslateTipAsync(p as AchievementRowViewModel), OnError);
@@ -1306,12 +1308,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             var ended = _ended.ToList();
             _ended.Clear();
             var started = running.Except(_lastRunning).ToList();
-            if (ended.Count > 0) _lastSession = ended.FirstOrDefault(s => s.AppId == _game?.AppId) ?? ended[^1];
-            else if (started.Count > 0) _lastSession = null;
+            foreach (var session in ended) _lastSessions[session.AppId] = session;
+            foreach (var app in started) _lastSessions.Remove(app);
             UpdateSession();
             if (_game is { } played && _lastRunning.Contains(played.AppId) && !running.Contains(played.AppId) && _svc.HasApiKey)
             {
-                var session = _lastSession;
+                var session = _lastSessions.GetValueOrDefault(played.AppId);
                 _ = SafeAsync(() => AfterSessionAsync(played, session));
             }
             _lastRunning = running;
@@ -1420,7 +1422,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void UpdateSession()
     {
         var now = DateTimeOffset.Now;
-        var summary = _lastSession is { } session && _game is { } game && game.AppId == session.AppId && (_svc.HasApiKey || _svc.Bridge.Exists)
+        var summary = _game is { } game && _lastSessions.TryGetValue(game.AppId, out var session) && (_svc.HasApiKey || _svc.Bridge.Exists)
             ? SessionSummary.Of(game, session, _selectedPercentile.Value, now, _sessions.Played(game.AppId, now))
             : null;
         // A game started and closed at once is not worth a summary.
