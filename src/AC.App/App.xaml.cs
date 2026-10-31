@@ -9,6 +9,9 @@ namespace AC.App;
 
 public partial class App : Application
 {
+    /// <summary>Start without a window, in the notification area.</summary>
+    public const string TrayArg = "--tray";
+
     private Mutex? _single;
     private EventWaitHandle? _showSignal;
     private RegisteredWaitHandle? _showWait;
@@ -32,6 +35,7 @@ public partial class App : Application
             (_, _) => Dispatcher.BeginInvoke(ShowMainWindow), null, Timeout.Infinite, executeOnlyOnce: false);
 
         DispatcherUnhandledException += OnUnhandled;
+        SessionEnding += (_, _) => (MainWindow as AC.App.MainWindow)?.AllowQuit();
         AppDomain.CurrentDomain.UnhandledException += (_, a) =>
             AppLog.Error("Unhandled error", a.ExceptionObject as Exception ?? new Exception(a.ExceptionObject?.ToString()));
         TaskScheduler.UnobservedTaskException += (_, a) =>
@@ -50,7 +54,9 @@ public partial class App : Application
         ThemeManager.Apply(settings.Theme);
         ImageCache.TrimInBackground();
         base.OnStartup(e);
-        new MainWindow().Show();
+        bool inTray = e.Args.Contains(TrayArg);
+        var window = new MainWindow(inTray);
+        if (!inTray) window.Show();
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -79,12 +85,7 @@ public partial class App : Application
         }
     }
 
-    private void ShowMainWindow()
-    {
-        if (MainWindow is not { } w) return;
-        if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
-        w.Activate();
-    }
+    private void ShowMainWindow() => (MainWindow as AC.App.MainWindow)?.ShowFromTray();
 
     private static void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
     {

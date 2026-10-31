@@ -15,8 +15,13 @@ public partial class MainWindow : Window
     private OverlayWindow? _overlay;
     /// <summary>The hotkeys that could not be registered: taken by another program, or not a valid combination.</summary>
     private string? _hotkeyProblem;
+    private TrayIcon? _tray;
+    private readonly bool _startedInTray;
+    private bool _started;
+    private bool _quitting;
 
-    public MainWindow()
+    /// <param name="inTray">Started with Windows: no window, the app watches for games from the notification area.</param>
+    public MainWindow(bool inTray = false)
     {
         InitializeComponent();
         WindowFit.ToWorkArea(this);
@@ -24,12 +29,62 @@ public partial class MainWindow : Window
         DataContext = _vm;
         _vm.Toast += OnToast;
         _vm.PlayingChanged += OnPlayingChanged;
-        Loaded += async (_, _) =>
+        _startedInTray = inTray;
+        Loaded += async (_, _) => await StartAsync();
+        UpdateTray();
+        if (inTray)
         {
-            await _vm.StartAsync();
-            // The statuses of the start would hide it.
-            if (_hotkeyProblem is { } problem) _vm.StatusMessage = problem;
-        };
+            new WindowInteropHelper(this).EnsureHandle();
+            _ = StartAsync();
+        }
+    }
+
+    private async Task StartAsync()
+    {
+        if (_started) return;
+        _started = true;
+        await _vm.StartAsync();
+        // The statuses of the start would hide it.
+        if (_hotkeyProblem is { } problem) _vm.StatusMessage = problem;
+    }
+
+    /// <summary>The icon is there while closing the window keeps the app running, and after a start with Windows.</summary>
+    private void UpdateTray()
+    {
+        _tray?.Dispose();
+        _tray = null;
+        if (!_vm.Service.Settings.CloseToTray && !_startedInTray) return;
+        var open = new MenuItem { Header = Loc.T("tray.open"), FontWeight = FontWeights.SemiBold };
+        open.Click += (_, _) => ShowFromTray();
+        var quit = new MenuItem { Header = Loc.T("tray.quit") };
+        quit.Click += (_, _) => Quit();
+        _tray = new TrayIcon("Hundo", new ContextMenu { Items = { open, quit } });
+        _tray.Click += ShowFromTray;
+    }
+
+    public void ShowFromTray()
+    {
+        Show();
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    /// <summary>Closing from now on quits: the tray's Quit, or Windows ending the session.</summary>
+    public void AllowQuit() => _quitting = true;
+
+    private void Quit()
+    {
+        _quitting = true;
+        Close();
+    }
+
+    private void HintTrayOnce()
+    {
+        var s = _vm.Service.Settings;
+        if (s.TrayHintShown || _tray is null) return;
+        s.TrayHintShown = true;
+        _vm.Service.SaveSettings();
+        _tray.ShowInfo(Loc.T("tray.hintTitle"), Loc.T("tray.hint"));
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -120,6 +175,7 @@ public partial class MainWindow : Window
         if (!saved) return;
         Loc.SetLanguage(_vm.Service.Settings.UiLanguage);
         ThemeManager.Apply(_vm.Service.Settings.Theme);
+        UpdateTray();
         _vm.SettingsChanged();
         _overlay?.ApplySettings();
         _vm.StatusMessage = _hotkeyProblem ?? Loc.T("status.settingsSaved");
@@ -166,6 +222,15 @@ public partial class MainWindow : Window
     {
         KeepTyped();
         _overlay?.SavePosition();
+        if (!_quitting && _tray is not null)
+        {
+            // Into the notification area: the app keeps watching for the game, the hotkeys and the overlay work on.
+            e.Cancel = true;
+            Hide();
+            HintTrayOnce();
+            base.OnClosing(e);
+            return;
+        }
         // Unregister the hotkeys while the window is alive (UnregisterHotKey fails once it is destroyed).
         _hotkeys?.Dispose();
         _hotkeys = null;
@@ -174,6 +239,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _tray?.Dispose();
         _overlay?.Close();
         _vm.Dispose();
         base.OnClosed(e);

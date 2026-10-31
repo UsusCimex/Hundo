@@ -102,6 +102,11 @@ public sealed class AppSettings
     /// <summary>Look for a new release on GitHub at startup.</summary>
     public bool CheckUpdates { get; set; } = true;
 
+    /// <summary>Closing the window leaves the app in the notification area: it keeps watching for the game.</summary>
+    public bool CloseToTray { get; set; } = true;
+    /// <summary>The note that the app keeps running was shown on the first close.</summary>
+    public bool TrayHintShown { get; set; }
+
     /// <summary>Brings settings of an older version up to date. True - they changed and are worth saving.</summary>
     public bool Upgrade()
     {

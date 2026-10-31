@@ -29,6 +29,7 @@ public partial class SettingsWindow : Window
         ThemeBox.SelectedItem = Options.Themes.FirstOrDefault(t => t.Value == s.Theme) ?? Options.Themes[0];
         HideSpoilersBox.IsChecked = s.HideSpoilers;
         CheckUpdatesBox.IsChecked = s.CheckUpdates;
+        CloseToTrayBox.IsChecked = s.CloseToTray;
         ToggleHotkeyBox.Text = s.OverlayToggleHotkey;
         InteractHotkeyBox.Text = s.OverlayInteractHotkey;
         OverlayAutoBox.IsChecked = s.OverlayAuto;
@@ -121,6 +122,7 @@ public partial class SettingsWindow : Window
         s.Theme = (ThemeBox.SelectedItem as Option<AppTheme>)?.Value ?? AppTheme.System;
         s.HideSpoilers = HideSpoilersBox.IsChecked == true;
         s.CheckUpdates = CheckUpdatesBox.IsChecked == true;
+        s.CloseToTray = CloseToTrayBox.IsChecked == true;
         s.OverlayToggleHotkey = ToggleHotkeyBox.Text.Trim();
         s.OverlayInteractHotkey = InteractHotkeyBox.Text.Trim();
         s.OverlayAuto = OverlayAutoBox.IsChecked == true;
