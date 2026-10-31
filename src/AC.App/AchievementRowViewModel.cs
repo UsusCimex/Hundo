@@ -1,5 +1,6 @@
 using System.Globalization;
 using AC.Core;
+using AC.Core.SteamFormats;
 
 namespace AC.App;
 
@@ -112,6 +113,17 @@ public sealed class AchievementRowViewModel : ObservableObject
         OnPropertyChanged(nameof(GuidePictures));
         OnPropertyChanged(nameof(OverlayTip));
     }
+
+    // A count not started is left out: story achievements of some games count every mission from 0 to 100.
+    private StatProgress? Started => _row.Progress is { } p && p.Value > p.Min ? p : null;
+
+    public bool HasProgress => Started is not null;
+    public double ProgressValue => Started?.Fraction ?? 0;
+
+    /// <summary>"140 / 300" for a locked achievement that counts something.</summary>
+    public string ProgressText => Started is { } p ? $"{Count(p.Value)} / {Count(p.Max)}" : "";
+
+    private static string Count(double n) => n.ToString(n % 1 == 0 ? "N0" : "N1", CultureInfo.CurrentCulture);
 
     public bool IsHidden => _row.Def.Hidden;
     public bool IsLocked => _row.Status == EffectiveStatus.Locked;
@@ -345,6 +357,7 @@ public sealed class AchievementRowViewModel : ObservableObject
         nameof(CanWriteToSteam), nameof(IsSpoilerHidden), nameof(IsTipHidden), nameof(IsHidden), nameof(IsLocked), nameof(IsManualStatus),
         nameof(GroupIsAuto), nameof(IsPendingWrite), nameof(RarityText), nameof(RarityLevel), nameof(EstimateHint),
         nameof(EstimateBoth), nameof(IsLate), nameof(InOverlay), nameof(IsOffOverlay),
+        nameof(HasProgress), nameof(ProgressValue), nameof(ProgressText),
     };
 
     /// <summary>Swaps the row data after a recalculation without recreating the object (keeps focus).</summary>

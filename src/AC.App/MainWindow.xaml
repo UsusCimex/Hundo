@@ -321,6 +321,10 @@
                         </Grid>
                         <TextBlock Text="{Binding Note}" Style="{StaticResource Caption}" FontStyle="Italic" TextWrapping="Wrap" Margin="0,4,0,0"
                                    Visibility="{Binding Note, Converter={StaticResource EmptyToCollapsed}}" />
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0" Visibility="{Binding HasProgress, Converter={StaticResource BoolToVis}}">
+                            <ProgressBar Width="140" Minimum="0" Maximum="1" Value="{Binding ProgressValue, Mode=OneWay}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding ProgressText}" Style="{StaticResource Caption}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" MinWidth="120">

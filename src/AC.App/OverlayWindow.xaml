@@ -47,6 +47,20 @@
             </Setter>
         </Style>
 
+        <Style x:Key="OvProgress" TargetType="ProgressBar">
+            <Setter Property="Height" Value="3" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid x:Name="PART_Track">
+                            <Border Background="{StaticResource OvPill}" CornerRadius="1.5" />
+                            <Border x:Name="PART_Indicator" Background="{StaticResource OvAccent}" CornerRadius="1.5" HorizontalAlignment="Left" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <DataTemplate x:Key="OverlayItem">
             <Grid Margin="0,4">
                 <Grid.ColumnDefinitions>
@@ -80,6 +94,11 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
+                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0" Visibility="{Binding HasProgress, Converter={StaticResource BoolToVis}}">
+                        <ProgressBar Style="{StaticResource OvProgress}" Width="120" Minimum="0" Maximum="1" Value="{Binding ProgressValue, Mode=OneWay}"
+                                     VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding ProgressText}" Foreground="{StaticResource OvMuted}" FontSize="11" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
                     <TextBlock Text="{Binding Note}" Foreground="{StaticResource OvMuted}" FontSize="11" FontStyle="Italic" TextWrapping="Wrap"
                                Margin="0,2,0,0" Visibility="{Binding Note, Converter={StaticResource EmptyToCollapsed}}" />
                     <!-- The guide tip, four lines at most; blurred like the description of a hidden one. -->

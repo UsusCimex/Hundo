@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using AC.Core.SteamFormats;
 
 namespace AC.Core;
 
@@ -163,6 +164,10 @@ public sealed class GameData
     /// <summary>When the time to 100% was last asked from Steam Hunters, found or not.</summary>
     public DateTimeOffset? CompletionFetchedAt { get; set; }
 
+    /// <summary>How far the achievements that count something have come, read from Steam's files; not saved.</summary>
+    [JsonIgnore]
+    public Dictionary<string, StatProgress> StatProgress { get; set; } = new();
+
     /// <summary>
     /// Time to 100% derived from the player's own progress when CompletionMinutes is not set.
     /// Recomputed on every estimate, not saved.
@@ -219,6 +224,7 @@ public sealed class GameData
 /// <param name="Behind">Locked, and the player has gone past it by the order of unlocks (<see cref="GameLogic.Behind"/>).</param>
 /// <param name="OffOverlay">The user took it off the overlay (<see cref="AchievementState.OffOverlay"/>).</param>
 /// <param name="AutoMarkUndone">Locked, though the app once marked it by time: the user took that mark back.</param>
+/// <param name="Progress">Locked and counting something: how far the count has come.</param>
 public sealed record AchievementRow(
     AchievementDef Def,
     EffectiveStatus Status,
@@ -232,7 +238,8 @@ public sealed record AchievementRow(
     bool ProbablyMissed = false,
     bool Behind = false,
     bool OffOverlay = false,
-    bool AutoMarkUndone = false)
+    bool AutoMarkUndone = false,
+    StatProgress? Progress = null)
 {
     public string ApiName => Def.ApiName;
     public bool IsDone => Status != EffectiveStatus.Locked;

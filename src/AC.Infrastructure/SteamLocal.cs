@@ -191,6 +191,16 @@ public static class SteamLocal
 
     public static uint AccountId(ulong steamId64) => (uint)(steamId64 - SteamId64Base);
 
+    /// <summary>Progress of the achievements that count something; empty - none, or no stats of the player here.</summary>
+    public static Dictionary<string, StatProgress> ReadProgress(uint appId, ulong steamId64)
+    {
+        var dir = StatsDir();
+        if (dir is null || steamId64 < SteamId64Base) return new();
+        var schema = BinaryKeyValue.Load(Path.Combine(dir, $"UserGameStatsSchema_{appId}.bin"));
+        var stats = BinaryKeyValue.Load(Path.Combine(dir, UserStatsFileName(steamId64, appId)));
+        return schema is null || stats is null ? new() : StatsProgressReader.Read(schema, stats, appId);
+    }
+
     /// <summary>When Steam last wrote the player's stats of a game; null - no such file.</summary>
     public static DateTimeOffset? StatsWrittenAt(ulong steamId64, uint appId)
     {

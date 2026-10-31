@@ -645,6 +645,46 @@ static class Tests
         Assert.Equal("https://cdn.steamstatic.com/steamcommunity/public/images/apps/480/abc.jpg", StatsSchemaReader.IconUrl(480, list[0].Icon));
     }
 
+    public static void StatsProgress_FromSchemaAndPlayerStats()
+    {
+        KvNode Obj(string name, params KvNode[] children) => new(name, KvType.Object, null, children);
+        KvNode Val(string name, object value) =>
+            new(name, value switch { string => KvType.String, float => KvType.Float32, _ => KvType.Int32 }, value, null);
+        KvNode Counted(string bit, string api, string stat, int max) =>
+            Obj(bit, Val("name", api), Obj("progress", Val("min_val", 0), Val("max_val", max),
+                Obj("value", Val("operation", "statvalue"), Val("operand1", stat))));
+
+        var schema = Obj("", Obj("480", Obj("stats",
+            Obj("1", Val("type", "INT"), Val("name", "kills"), Val("default", 0)),
+            Obj("2", Val("type", "FLOAT"), Val("name", "meters"), Val("default", 0)),
+            Obj("3", Val("type", "INT"), Val("name", "jumps"), Val("default", 0)),
+            Obj("4", Val("type", "ACHIEVEMENTS"), Obj("bits",
+                Counted("0", "KILL_10", "kills", 10),
+                Counted("1", "RUN_5K", "meters", 5000),
+                Counted("2", "JUMP_3", "jumps", 3),
+                Counted("3", "UNKNOWN_STAT", "nothing", 5),
+                Obj("4", Val("name", "PLAIN")))))));
+        // The player's file keys stats by id; a float stat's value is kept as its bits.
+        var player = Obj("", Obj("cache",
+            Obj("1", Val("data", 4)),
+            Obj("2", Val("data", BitConverter.SingleToInt32Bits(1234.5f)))));
+
+        var progress = StatsProgressReader.Read(schema, player, 480);
+        Assert.Equal("JUMP_3,KILL_10,RUN_5K", string.Join(",", progress.Keys.Order()));
+        Assert.Equal(0.4, progress["KILL_10"].Fraction);
+        Assert.Equal(1234.5, progress["RUN_5K"].Value);
+        Assert.Equal(0.0, progress["JUMP_3"].Value); // not in the player's file: the default
+
+        var g = SampleGame();
+        g.Achievements.Add(new AchievementDef { ApiName = "KILL_10", Name = "Killer" });
+        g.Achievements.Add(new AchievementDef { ApiName = "RUN_5K", Name = "Runner" });
+        g.StatProgress = progress;
+        g.StateOf("RUN_5K").SteamUnlocked = true;
+        var rows = GameLogic.BuildRows(g, Percentile.P50).ToDictionary(r => r.ApiName);
+        Assert.Equal(4.0, rows["KILL_10"].Progress?.Value);
+        Assert.True(rows["RUN_5K"].Progress is null, "an unlocked one shows no count");
+    }
+
     public static void SteamClient_ParseCommand()
     {
         var read = AC.Infrastructure.BridgeCommand.Parse(["read", "480", "--lang", "russian", "--ui", "ru"]);

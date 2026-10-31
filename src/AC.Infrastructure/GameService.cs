@@ -158,6 +158,7 @@ public sealed class GameService
 
         // Local schema: hidden descriptions and the "protected" flag; cheap, always read.
         MergeLocalSchema(game);
+        game.StatProgress = SteamLocal.ReadProgress(appId, Settings.SteamId64);
 
         // Percentages go after the list is built from all sources, otherwise some are lost without a key.
         bool percentagesMissing = false;
@@ -220,6 +221,7 @@ public sealed class GameService
     /// </summary>
     public async Task<IReadOnlyList<string>> RefreshStateAutoAsync(GameData game, CancellationToken ct = default)
     {
+        game.StatProgress = SteamLocal.ReadProgress(game.AppId, Settings.SteamId64);
         bool useClient = Settings.StatusSource == StatusSource.SteamClient || !HasApiKey || Settings.SteamId64 == 0;
         if (!useClient) return await RefreshStateAsync(game, ct);
         var (fresh, error) = await RefreshViaBridgeAsync(game, ct);
