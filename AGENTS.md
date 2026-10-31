@@ -82,7 +82,7 @@ The app was first called Achievement Companion: the data folder, the DPAPI entro
 | Time to 100% | `steamhunters.com/api/apps/<appid>`: `medianCompletionTime`, minutes, asked once a week |
 | Status | `GetPlayerAchievements` (key and public "Game details") or the Steam client |
 | Library | `GetOwnedGames` (key); fresh playtime of one game - the same call with `appids_filter` |
-| Own sample | authors of `store.steampowered.com/appreviews/<appid>` and their `GetPlayerAchievements`; collected on its own only when nobody has percentages, at most once a week |
+| Own sample | authors of the game's reviews (`IUserReviewsService/GetAppReviews`, no key) and their `GetPlayerAchievements`; collected on its own only when nobody has percentages, at most once a week |
 | Guide quotes | `IPublishedFileService/QueryFiles` (key): guides tagged Achievements and the language, up to 5 by title, until every achievement has words; `GetSubSectionData`: sections in BBCode; pictures from its tags and links, `[previewimg]` ones from the uploads (`return_previews`), without icons by size; authors from `GetPlayerSummaries`. The content language first, then English with English names from the local schema or `GetSchemaForGame` |
 | Translation of quotes | on a click: `translate.googleapis.com/translate_a/single?client=gtx`, Google Translate's keyless web endpoint (not an official API); when it does not answer, the translator's page in the browser |
 | Store art | `store_item_assets/steam/apps/<appid>/header.jpg`; newer apps keep it in a hashed folder: `IStoreBrowseService/GetItems`, else the store's `appdetails` |

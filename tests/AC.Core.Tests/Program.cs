@@ -913,11 +913,12 @@ static class Tests
     public static void Service_BlockedNetworkWarnsOnceAndStopsTheSample()
     {
         const string blocked = "<HTML><HEAD><TITLE>Access Denied</TITLE></HEAD><BODY>errors&#46;edgesuite&#46;net</BODY></HTML>";
+        // The reviews answer, so the sample gets as far as asking the players.
         var fake = new FakeHttp(url =>
-            url.Contains("api.steampowered.com") ? (HttpStatusCode.Forbidden, blocked)
+            url.Contains("IUserReviewsService/GetAppReviews") ? (HttpStatusCode.OK, Reviews)
+            : url.Contains("api.steampowered.com") ? (HttpStatusCode.Forbidden, blocked)
             : url.EndsWith("/api/apps/1/achievements") ? (HttpStatusCode.OK, HuntersPercentages)
             : url.EndsWith("/api/apps/1") ? (HttpStatusCode.OK, """{"appId":1,"medianCompletionTime":600}""")
-            : url.Contains("/appreviews/") ? (HttpStatusCode.OK, Reviews)
             : (HttpStatusCode.NotFound, ""));
         WithService(fake, (svc, store) =>
         {
@@ -943,7 +944,7 @@ static class Tests
                 Assert.Equal(AC.Infrastructure.SteamFailure.Blocked, e.Failure);
             }
             int asked = fake.Urls.Count(u => u.Contains("GetPlayerAchievements"));
-            Assert.True(asked <= 4, $"stopped at the first answers, asked {asked}");
+            Assert.True(asked is > 0 and <= 4, $"stopped at the first answers, asked {asked}");
         });
     }
 
@@ -1009,7 +1010,7 @@ static class Tests
         """;
 
     const string Reviews = """
-        {"success":1,"cursor":"next","reviews":[
+        {"response":{"cursor":"next","reviews":[
          {"timestamp_created":1700000000,"author":{"steamid":"76561197960287931","playtime_at_review":100,"playtime_forever":200,"last_played":1700000000}},
          {"timestamp_created":1700000000,"author":{"steamid":"76561197960287932","playtime_at_review":100,"playtime_forever":200,"last_played":1700000000}},
          {"timestamp_created":1700000000,"author":{"steamid":"76561197960287933","playtime_at_review":100,"playtime_forever":200,"last_played":1700000000}},
@@ -1017,7 +1018,7 @@ static class Tests
          {"timestamp_created":1700000000,"author":{"steamid":"76561197960287935","playtime_at_review":100,"playtime_forever":200,"last_played":1700000000}},
          {"timestamp_created":1700000000,"author":{"steamid":"76561197960287936","playtime_at_review":100,"playtime_forever":200,"last_played":1700000000}},
          {"timestamp_created":1700000000,"author":{"steamid":"76561197960287937","playtime_at_review":100,"playtime_forever":200,"last_played":1700000000}},
-         {"timestamp_created":1700000000,"author":{"steamid":"76561197960287938","playtime_at_review":100,"playtime_forever":200,"last_played":1700000000}}]}
+         {"timestamp_created":1700000000,"author":{"steamid":"76561197960287938","playtime_at_review":100,"playtime_forever":200,"last_played":1700000000}}]}}
         """;
 
     const string Schema = """

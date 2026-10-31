@@ -162,8 +162,8 @@ public sealed class SteamWebApi(HttpClient http)
     }
 
     /// <summary>
-    /// Authors of the game's Steam store reviews (public API, no key needed): SteamID, playtime at review,
-    /// total playtime and when they last played. This is our player source for own statistics.
+    /// Authors of the game's Steam reviews (no key needed): SteamID, playtime at review, total playtime and when they
+    /// last played. This is our player source for own statistics.
     /// </summary>
     public async Task<List<ReviewAuthor>> GetReviewAuthorsAsync(uint appId, int max, CancellationToken ct = default)
     {
@@ -172,10 +172,15 @@ public sealed class SteamWebApi(HttpClient http)
         string cursor = "*";
         for (int page = 0; page < 20 && result.Count < max; page++)
         {
-            using var doc = await GetJsonAsync(
-                $"https://store.steampowered.com/appreviews/{appId}?json=1&filter=recent&language=all&review_type=all&purchase_type=all&num_per_page=100&cursor={Esc(cursor)}", ct);
-            var root = doc.RootElement;
-            if (!root.TryGetProperty("reviews", out var reviews) || reviews.GetArrayLength() == 0) break;
+            // A service method takes its arguments as one JSON object. Filter 1 - the most recent first; purchase
+            // type 1 - all, not only bought on Steam.
+            var input = JsonSerializer.Serialize(new
+            {
+                appid = appId, filter = 1, languages = new[] { "all" }, purchase_type = 1, num_per_page = 100, cursor,
+            });
+            using var doc = await GetJsonAsync($"{Base}/IUserReviewsService/GetAppReviews/v1/?input_json={Esc(input)}", ct);
+            if (!doc.RootElement.TryGetProperty("response", out var root) ||
+                !root.TryGetProperty("reviews", out var reviews) || reviews.GetArrayLength() == 0) break;
             foreach (var r in reviews.EnumerateArray())
             {
                 if (!r.TryGetProperty("author", out var au)) continue;
