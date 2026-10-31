@@ -685,7 +685,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         await Busy(Loc.T("status.reloading"), async () =>
         {
             var seq = ++_loadSeq;
-            var report = await _svc.LoadGameAsync(_game.AppId, _game.Name, forceSchema: force, running: _sessions.IsRunning(_game.AppId));
+            var report = await _svc.LoadGameAsync(_game.AppId, _game.Name, forceSchema: force, running: _sessions.IsRunning(_game.AppId),
+                current: _game);
             if (seq != _loadSeq) return;
             SetGame(report.Game);
             StatusMessage = report.Warnings.Count > 0 ? string.Join(" | ", report.Warnings) : Loc.T("status.reloaded");

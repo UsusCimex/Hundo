@@ -102,11 +102,12 @@ public sealed class GameService
     /// player status from the Web API. A failed step does not fail the load but goes to Warnings.
     /// </summary>
     /// <param name="running">The game is running: Steam's playtime shows only part of the session.</param>
+    /// <param name="current">The open game on a reload: marks and notes made while Steam answers go to it and stay.</param>
     public async Task<LoadReport> LoadGameAsync(uint appId, string? knownName = null, bool forceSchema = false, bool running = false,
-        CancellationToken ct = default)
+        GameData? current = null, CancellationToken ct = default)
     {
         var warnings = new List<string>();
-        var game = _store.LoadGame(appId) ?? new GameData { AppId = appId, Name = knownName ?? "" };
+        var game = current ?? _store.LoadGame(appId) ?? new GameData { AppId = appId, Name = knownName ?? "" };
         game.CountManualMarks = Settings.ManualUnlocks;
         if (!string.IsNullOrEmpty(knownName) && string.IsNullOrEmpty(game.Name)) game.Name = knownName;
 

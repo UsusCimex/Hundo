@@ -885,6 +885,26 @@ static class Tests
         });
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Service_ReloadKeepsEditsMadeMeanwhile()
+    {
+        GameData? open = null;
+        var fake = new FakeHttp(url =>
+        {
+            if (!url.Contains("GetSchemaForGame")) return (HttpStatusCode.NotFound, "");
+            if (open is not null) open.StateOf("miss").Note = "typed while Steam answers";
+            return (HttpStatusCode.OK, Schema);
+        });
+        WithService(fake, (svc, store) =>
+        {
+            store.SaveGame(SampleGame());
+            open = store.LoadGame(1)!;
+            var report = svc.LoadGameAsync(1, forceSchema: true, current: open).GetAwaiter().GetResult();
+            Assert.True(ReferenceEquals(open, report.Game), "the open game is reloaded in place");
+            Assert.Equal("typed while Steam answers", store.LoadGame(1)!.States["miss"].Note);
+        });
+    }
+
     const string HuntersPercentages = """
         [{"apiName":"ch1","steamPercentage":90},{"apiName":"ch5","steamPercentage":30},{"apiName":"miss","steamPercentage":20},
          {"apiName":"grind","steamPercentage":2},{"apiName":"misc","steamPercentage":50}]
