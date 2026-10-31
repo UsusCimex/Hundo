@@ -82,6 +82,30 @@
                     </TextBlock>
                     <TextBlock Text="{Binding Note}" Foreground="{StaticResource OvMuted}" FontSize="11" FontStyle="Italic" TextWrapping="Wrap"
                                Margin="0,2,0,0" Visibility="{Binding Note, Converter={StaticResource EmptyToCollapsed}}" />
+                    <!-- The guide tip, four lines at most; blurred like the description of a hidden one. -->
+                    <Border BorderBrush="{StaticResource OvAccent}" BorderThickness="2,0,0,0" Padding="6,0,0,0" Margin="0,4,0,0"
+                            Visibility="{Binding OverlayTip, Converter={StaticResource EmptyToCollapsed}}">
+                        <TextBlock Text="{Binding OverlayTip}" FontSize="11" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                   LineStackingStrategy="BlockLineHeight" LineHeight="14" MaxHeight="56" Background="Transparent">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsTipHidden}" Value="True" />
+                                                <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="False" />
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Effect">
+                                                <Setter.Value>
+                                                    <BlurEffect Radius="6" />
+                                                </Setter.Value>
+                                            </Setter>
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Border>
                 </StackPanel>
                 <StackPanel Grid.Column="2" VerticalAlignment="Top">
                     <Border Background="{StaticResource OvPill}" CornerRadius="8" Padding="7,1" HorizontalAlignment="Right">

@@ -82,6 +82,18 @@ public sealed class AchievementRowViewModel : ObservableObject
         : t.Author.Length > 0 ? Loc.T("details.guideSource", t.GuideTitle, t.Author)
         : Loc.T("details.guideSourceTitle", t.GuideTitle);
 
+    private bool _tipInOverlay;
+
+    /// <summary>The overlay shows the tip under its nearest achievement only: one is what there is time to read mid-game.</summary>
+    public bool TipInOverlay
+    {
+        get => _tipInOverlay;
+        set { if (Set(ref _tipInOverlay, value)) OnPropertyChanged(nameof(OverlayTip)); }
+    }
+
+    /// <summary>The tip in the overlay: its translation once made, else the guide's words.</summary>
+    public string OverlayTip => _tipInOverlay ? _owner.TipTranslation(ApiName) ?? Tip?.Text ?? "" : "";
+
     /// <summary>A guide tells how to get a hidden achievement even when Steam gave no description: blurred the same way.</summary>
     public bool IsTipHidden => _row.Def.Hidden && !_row.IsDone && _owner.HideSpoilers && !_owner.IsRevealed(ApiName);
 
@@ -98,6 +110,7 @@ public sealed class AchievementRowViewModel : ObservableObject
         OnPropertyChanged(nameof(GuideSource));
         OnPropertyChanged(nameof(CanTranslate));
         OnPropertyChanged(nameof(GuidePictures));
+        OnPropertyChanged(nameof(OverlayTip));
     }
 
     public bool IsHidden => _row.Def.Hidden;

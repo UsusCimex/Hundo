@@ -574,7 +574,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         try
         {
-            if (await _svc.TranslateTipAsync(_game.AppId, _guides, row.ApiName, Loc.Language) is not null) row.ShowTranslation(true);
+            if (await _svc.TranslateTipAsync(_game.AppId, _guides, row.ApiName, Loc.Language) is not null)
+            {
+                row.ShowTranslation(true);
+                foreach (var shown in OverlayNearest.Where(r => r.ApiName == row.ApiName)) shown.RefreshGuide();
+            }
         }
         catch (Exception e) when (e is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
         {
@@ -590,7 +594,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var tips = await _svc.GetGuideTipsAsync(game);
         if (!ReferenceEquals(game, _game)) return;
         _guides = tips;
-        foreach (var row in Rows) row.RefreshGuide();
+        foreach (var row in Rows.Concat(OverlayNearest)) row.RefreshGuide();
     }
 
     private static readonly TimeSpan SampleRefresh = TimeSpan.FromDays(7);
@@ -1292,6 +1296,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                               .ThenByDescending(r => r.Def.Percent ?? -1)
                               .Take(Math.Max(1, _svc.Settings.OverlayNearestCount)))
             OverlayNearest.Add(new AchievementRowViewModel(this, r));
+        if (OverlayNearest.Count > 0) OverlayNearest[0].TipInOverlay = true;
     }
 
     // ---------- spoilers ----------
