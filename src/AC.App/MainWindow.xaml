@@ -402,7 +402,7 @@
                     <TextBlock Text="Hundo" Style="{StaticResource Subtitle}" />
                     <TextBlock Text="{local:Tr library.tagline}" Style="{StaticResource Caption}" Margin="0,2,0,14" />
                     <Grid Margin="0,0,0,10">
-                        <TextBox x:Name="LibrarySearch" Padding="32,5,6,6" Text="{Binding LibraryFilter, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox x:Name="LibrarySearch" Padding="32,5,6,6" Text="{Binding Library.Filter, UpdateSourceTrigger=PropertyChanged}" />
                         <TextBlock Text="&#xE721;" Style="{StaticResource Glyph}" Margin="11,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False"
                                    Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
                         <TextBlock Text="{local:Tr library.search}" Margin="33,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"
@@ -411,12 +411,12 @@
                     </Grid>
                     <DockPanel Margin="0,0,0,10">
                         <ToggleButton DockPanel.Dock="Right" Style="{StaticResource FilterChip}" Margin="8,0,0,0" VerticalAlignment="Center"
-                                      IsChecked="{Binding LibraryStartedOnly}" ToolTip="{local:Tr library.startedTip}"
+                                      IsChecked="{Binding Library.StartedOnly}" ToolTip="{local:Tr library.startedTip}"
                                       AutomationProperties.AutomationId="LibraryStarted">
                             <TextBlock Text="{local:Tr library.started}" />
                         </ToggleButton>
                         <ComboBox HorizontalAlignment="Stretch" ItemsSource="{x:Static local:Options.LibrarySorts}" DisplayMemberPath="Title"
-                                  SelectedItem="{Binding SelectedLibrarySort}" AutomationProperties.AutomationId="LibrarySort" />
+                                  SelectedItem="{Binding Library.SelectedSort}" AutomationProperties.AutomationId="LibrarySort" />
                     </DockPanel>
                 </StackPanel>
 
@@ -441,7 +441,7 @@
                     <CheckBox Content="{local:Tr library.follow}" IsChecked="{Binding AutoFollow}" />
                 </StackPanel>
 
-                <ListBox ItemsSource="{Binding LibraryView}" SelectedItem="{Binding SelectedLibraryGame}" HorizontalContentAlignment="Stretch"
+                <ListBox ItemsSource="{Binding Library.View}" SelectedItem="{Binding Library.Selected}" HorizontalContentAlignment="Stretch"
                          AutomationProperties.AutomationId="LibraryList"
                          Background="Transparent" BorderThickness="0"
                          VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.ScrollUnit="Pixel"

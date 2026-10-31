@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -35,7 +34,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private int _loadSeq;
     private int _busyCount;
     private string _completionFetchedText = "";
-    private readonly Dictionary<uint, GameSummary> _summaries;
     /// <summary>Hidden achievements whose description the user revealed ("appid/apiName"). Kept until the app closes.</summary>
     private readonly HashSet<string> _revealed = new(StringComparer.Ordinal);
     private GuideTips? _guides;
@@ -43,19 +41,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public MainViewModel(GameService svc)
     {
         _svc = svc;
-        _summaries = new Dictionary<uint, GameSummary>(svc.Store.LoadSummaries());
-        LibraryView = CollectionViewSource.GetDefaultView(Library);
+        Library = new LibraryViewModel(svc);
+        Library.Picked += game => _ = SafeAsync(() => LoadAsync(game.AppId, game.Name));
         _rowsView = (ListCollectionView)CollectionViewSource.GetDefaultView(Rows);
-        LibraryView.Filter = o => o is LibraryItemViewModel g &&
-            (!LibraryStartedOnly || g.IsStarted) &&
-            (string.IsNullOrWhiteSpace(_libraryFilter) || g.Name.Contains(_libraryFilter.Trim(), StringComparison.CurrentCultureIgnoreCase));
 
         _selectedSort = Options.Sorts[0];
         _kindFilter = Options.KindFilters[0];
         _selectedPercentile = Options.Percentiles.FirstOrDefault(p => p.Value == svc.Settings.Percentile) ?? Options.Percentiles[0];
         _selectedHours = Options.HourModes.FirstOrDefault(h => h.Value == svc.Settings.Hours) ?? Options.HourModes[0];
-        _selectedLibrarySort = Options.LibrarySorts.FirstOrDefault(s => s.Value == svc.Settings.LibrarySort) ?? Options.LibrarySorts[0];
-        ApplyLibrarySort();
 
         RefreshLibraryCommand = new AsyncCommand(RefreshLibraryAsync, OnError);
         LoadAppIdCommand = new AsyncCommand(LoadAppIdAsync, OnError);
@@ -101,7 +94,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
         };
 
-        FillLibrary(svc.CachedLibrary());
+        Library.Fill(svc.CachedLibrary(), null);
     }
 
     public GameService Service => _svc;
@@ -115,60 +108,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     // ---------- library ----------
 
-    public ObservableCollection<LibraryItemViewModel> Library { get; } = new();
-    public ICollectionView LibraryView { get; }
-
-    private Option<LibrarySort> _selectedLibrarySort;
-    public Option<LibrarySort> SelectedLibrarySort
-    {
-        get => _selectedLibrarySort;
-        set
-        {
-            if (!Set(ref _selectedLibrarySort, value)) return;
-            _svc.Settings.LibrarySort = value.Value;
-            _svc.SaveSettings();
-            ApplyLibrarySort();
-        }
-    }
-
-    private bool LibraryByTimeLeft => _selectedLibrarySort.Value == LibrarySort.TimeLeft;
-
-    public bool LibraryStartedOnly
-    {
-        get => _svc.Settings.LibraryStartedOnly;
-        set
-        {
-            if (_svc.Settings.LibraryStartedOnly == value) return;
-            _svc.Settings.LibraryStartedOnly = value;
-            _svc.SaveSettings();
-            OnPropertyChanged();
-            LibraryView.Refresh();
-        }
-    }
-
-    private void ApplyLibrarySort()
-    {
-        foreach (var item in Library) item.ShowLeft = LibraryByTimeLeft;
-        if (LibraryView is ListCollectionView view) view.CustomSort = LibraryByTimeLeft ? LibraryOrder.ByTimeLeft : null;
-    }
-
-    private string _libraryFilter = "";
-    public string LibraryFilter
-    {
-        get => _libraryFilter;
-        set { if (Set(ref _libraryFilter, value)) LibraryView.Refresh(); }
-    }
-
-    private LibraryItemViewModel? _selectedLibraryGame;
-    public LibraryItemViewModel? SelectedLibraryGame
-    {
-        get => _selectedLibraryGame;
-        set
-        {
-            if (!Set(ref _selectedLibraryGame, value) || value is null) return;
-            _ = SafeAsync(() => LoadAsync(value.AppId, value.Name));
-        }
-    }
+    public LibraryViewModel Library { get; }
 
     private string _appIdInput = "";
     public string AppIdInput { get => _appIdInput; set => Set(ref _appIdInput, value); }
@@ -472,14 +412,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             StatusMessage = Loc.T("status.noKey");
         }
-        else if (Library.Count == 0)
+        else if (Library.Items.Count == 0)
         {
             await SafeAsync(RefreshLibraryAsync);
         }
 
         var last = _svc.Settings.LastAppId;
         var start = running.Count == 0 || running.Contains(last) ? last : Followed(running);
-        if (start != 0) await SafeAsync(() => LoadAsync(start, Library.FirstOrDefault(g => g.AppId == start)?.Name));
+        if (start != 0) await SafeAsync(() => LoadAsync(start, Library.NameOf(start)));
         await SafeAsync(CheckUpdateAsync);
     }
 
@@ -488,28 +428,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         await Busy(Loc.T("status.loadingLibrary"), async () =>
         {
             var games = await _svc.RefreshLibraryAsync();
-            FillLibrary(games);
+            Library.Fill(games, _game?.AppId);
             StatusMessage = Loc.Plural("status.libraryLoaded", games.Count);
         });
-    }
-
-    private void FillLibrary(IEnumerable<OwnedGame> games)
-    {
-        Library.Clear();
-        foreach (var g in games) Library.Add(new LibraryItemViewModel(g, _summaries.GetValueOrDefault(g.AppId)) { ShowLeft = LibraryByTimeLeft });
-        ShowOpenInLibrary();
-    }
-
-    /// <summary>
-    /// The library list marks the open game however it was opened (at start, following the running game, by AppID):
-    /// otherwise it stays on the previous one, and a click on that one does not open it again.
-    /// </summary>
-    private void ShowOpenInLibrary()
-    {
-        var item = _game is { } open ? Library.FirstOrDefault(i => i.AppId == open.AppId) : null;
-        if (ReferenceEquals(item, _selectedLibraryGame)) return;
-        _selectedLibraryGame = item;
-        OnPropertyChanged(nameof(SelectedLibraryGame));
     }
 
     private async Task LoadAppIdAsync()
@@ -519,7 +440,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             StatusMessage = Loc.T("status.badAppId");
             return;
         }
-        await LoadAsync(id, Library.FirstOrDefault(g => g.AppId == id)?.Name);
+        await LoadAsync(id, Library.NameOf(id));
     }
 
     public async Task LoadAsync(uint appId, string? name)
@@ -1026,7 +947,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HeroImageUrl));
         RestartWatcher();
         ShowLoaded(game);
-        ShowOpenInLibrary();
+        Library.ShowOpen(game.AppId);
         OnPropertyChanged(nameof(Game));
         CommandManager.InvalidateRequerySuggested();
     }
@@ -1060,7 +981,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasApiKey));
         OnPropertyChanged(nameof(QueueText));
         OnPropertyChanged(nameof(UpdateText));
-        foreach (var item in Library) item.RefreshTexts();
+        Library.RefreshTexts();
         RestartWatcher();
         Recompute(rebuildRows: true);
         CommandManager.InvalidateRequerySuggested();
@@ -1139,13 +1060,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         HistoryDays = UnlockHistory.ByDay(_game, TimeZoneInfo.Local);
         UpdateOverlayLists(all);
 
-        var summary = GameSummary.Of(_game, _played);
-        _summaries[_game.AppId] = summary;
-        if (Library.FirstOrDefault(i => i.AppId == _game.AppId) is { } item && !summary.Equals(item.Summary))
-        {
-            item.Summary = summary;
-            if (LibraryByTimeLeft || LibraryStartedOnly) LibraryView.Refresh();
-        }
+        Library.UpdateSummary(_game.AppId, GameSummary.Of(_game, _played));
         UpdateSession();
     }
 
@@ -1377,7 +1292,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (AutoFollow && started.Count > 0 && (_game is null || !running.Contains(_game.AppId)))
             {
                 var next = Followed(started);
-                await SafeAsync(() => LoadAsync(next, Library.FirstOrDefault(g => g.AppId == next)?.Name));
+                await SafeAsync(() => LoadAsync(next, Library.NameOf(next)));
                 return;
             }
         }
@@ -1562,20 +1477,5 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         _runningTimer.Stop();
         _watcher?.Dispose();
-    }
-}
-
-/// <summary>Library orders other than Steam's own.</summary>
-internal sealed class LibraryOrder : System.Collections.IComparer
-{
-    public static readonly LibraryOrder ByTimeLeft = new();
-
-    public int Compare(object? x, object? y)
-    {
-        if (x is not LibraryItemViewModel a || y is not LibraryItemViewModel b) return 0;
-        int c = GameSummary.CompareByTimeLeft(a.Summary, b.Summary);
-        if (c != 0) return c;
-        c = Nullable.Compare(b.Game.LastPlayed, a.Game.LastPlayed);
-        return c != 0 ? c : string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase);
     }
 }
