@@ -49,7 +49,51 @@ public sealed class JsonStore
 
     private string GuidesPath(uint appId) => Path.Combine(GuidesDir, appId.ToString(CultureInfo.InvariantCulture) + ".json");
 
-    public AppSettings LoadSettings() => Read<AppSettings>(SettingsPath) ?? new AppSettings();
+    /// <summary>
+    /// A value that cannot be read (one of a newer version, a hand edit) stays at its default and the others are kept:
+    /// the saved key, SteamID and hotkeys are not lost for it.
+    /// </summary>
+    public AppSettings LoadSettings()
+    {
+        if (!File.Exists(SettingsPath)) return new AppSettings();
+        var json = File.ReadAllText(SettingsPath);
+        try
+        {
+            return JsonSerializer.Deserialize<AppSettings>(json, StoreJson.Pretty) ?? new AppSettings();
+        }
+        catch (JsonException)
+        {
+            KeepBroken(SettingsPath);
+            // Written back at once: the next start would set another copy aside.
+            var settings = ReadableSettings(json);
+            SaveSettings(settings);
+            return settings;
+        }
+    }
+
+    private static AppSettings ReadableSettings(string json)
+    {
+        var settings = new AppSettings();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return settings;
+            foreach (var value in doc.RootElement.EnumerateObject())
+            {
+                if (typeof(AppSettings).GetProperty(value.Name) is not { CanWrite: true } property) continue;
+                try
+                {
+                    if (value.Value.Deserialize(property.PropertyType, StoreJson.Pretty) is { } read) property.SetValue(settings, read);
+                }
+                catch (JsonException)
+                {
+                    AppLog.Info($"Settings: {value.Name} cannot be read, the default is used");
+                }
+            }
+        }
+        catch (JsonException) { /* not JSON at all: the defaults */ }
+        return settings;
+    }
 
     public void SaveSettings(AppSettings s) => Write(SettingsPath, s);
 
@@ -130,10 +174,15 @@ public sealed class JsonStore
         }
         catch (JsonException)
         {
-            // The file is corrupted: keep a copy so manual marks are not lost, and start clean.
-            try { File.Copy(path, path + ".broken-" + DateTime.Now.ToString("yyyyMMddHHmmss"), overwrite: true); } catch { }
+            KeepBroken(path);
             return null;
         }
+    }
+
+    /// <summary>A file that cannot be read is copied aside before it is written over, so manual marks are not lost.</summary>
+    private static void KeepBroken(string path)
+    {
+        try { File.Copy(path, path + ".broken-" + DateTime.Now.ToString("yyyyMMddHHmmss"), overwrite: true); } catch { }
     }
 
     /// <summary>

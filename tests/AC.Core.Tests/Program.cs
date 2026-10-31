@@ -1614,6 +1614,32 @@ static class Tests
         }
     }
 
+    public static void JsonStore_KeepsReadableSettings()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ac-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new AC.Infrastructure.JsonStore(dir);
+            File.WriteAllText(Path.Combine(dir, "settings.json"), """
+                { "Theme": "Neon", "SteamId64": 76561197960287930, "CsvSeparator": "ab", "OverlayToggleHotkey": "Ctrl+Alt+H",
+                  "UiLanguage": null, "PollSeconds": 30, "FromNewerVersion": true }
+                """);
+            var s = store.LoadSettings();
+            Assert.Equal(76561197960287930UL, s.SteamId64);
+            Assert.Equal("Ctrl+Alt+H", s.OverlayToggleHotkey);
+            Assert.Equal(30, s.PollSeconds);
+            Assert.Equal(AC.Infrastructure.AppTheme.System, s.Theme);
+            Assert.Equal(';', s.CsvSeparator);
+            Assert.Equal(Loc.Fallback, s.UiLanguage);
+            Assert.Equal(1, Directory.GetFiles(dir, "settings.json.broken-*").Length); // the file as it was
+            Assert.True(!File.ReadAllText(Path.Combine(dir, "settings.json")).Contains("Neon"), "written back, not set aside on every start");
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
     public static void JsonStore_RoundTripAndLog()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ac-test-" + Guid.NewGuid().ToString("N"));
