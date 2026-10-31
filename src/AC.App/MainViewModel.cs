@@ -1228,15 +1228,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void UpdateOverlayLists(IReadOnlyList<AchievementRow> all)
     {
+        // The ones the player has gone past go last: on the "from the start" hours they would come first.
         var open = all.Where(r => !r.IsDone && !r.OffOverlay).ToList();
         OverlayMissable.Clear();
         foreach (var r in open.Where(r => r.Kind == AchievementKind.Missable)
-                              .OrderBy(r => HoursOf(r) ?? double.MaxValue).Take(6))
+                              .OrderBy(r => r.Passed)
+                              .ThenBy(r => HoursOf(r) ?? double.MaxValue).Take(6))
             OverlayMissable.Add(new AchievementRowViewModel(this, r));
 
         OverlayNearest.Clear();
         foreach (var r in open.Where(r => r.Kind != AchievementKind.Missable)
-                              .OrderBy(r => HoursOf(r) is null)
+                              .OrderBy(r => r.Passed)
+                              .ThenBy(r => HoursOf(r) is null)
                               .ThenBy(HoursOf)
                               .ThenByDescending(r => r.Def.Percent ?? -1)
                               .Take(Math.Max(1, _svc.Settings.OverlayNearestCount)))
