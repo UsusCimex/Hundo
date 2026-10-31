@@ -159,6 +159,10 @@ static class Tests
     public static void Status_ManualThenSteam()
     {
         var g = SampleGame();
+        // The first read tells nothing new: what is unlocked came before the app knew the game.
+        Assert.Equal(0, GameLogic.ApplySteamState(g, new[] { ("misc", true, (DateTimeOffset?)null) }, DateTimeOffset.Now).Count);
+        Assert.Equal(EffectiveStatus.Unlocked, GameLogic.StatusOf(g.States["misc"]));
+
         var s = g.StateOf("ch5");
         s.ManualDone = true;
         s.Note = "играл под другим AppID";

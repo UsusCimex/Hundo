@@ -14,18 +14,19 @@ public static class GameLogic
     /// <summary>
     /// Applies fresh status from Steam. Manual marks and notes are kept:
     /// once the achievement unlocks in Steam, its status becomes "unlocked" by itself.
-    /// Returns the api names unlocked since the last sync.
+    /// Returns the api names unlocked since the last sync; none at the first one, which finds what came before.
     /// </summary>
     public static IReadOnlyList<string> ApplySteamState(
         GameData game,
         IEnumerable<(string ApiName, bool Unlocked, DateTimeOffset? UnlockTime)> steam,
         DateTimeOffset now)
     {
+        bool first = game.StateFetchedAt is null;
         var newlyUnlocked = new List<string>();
         foreach (var (apiName, unlocked, time) in steam)
         {
             var s = game.StateOf(apiName);
-            if (unlocked && !s.SteamUnlocked) newlyUnlocked.Add(apiName);
+            if (unlocked && !s.SteamUnlocked && !first) newlyUnlocked.Add(apiName);
             s.SteamUnlocked = unlocked;
             s.SteamUnlockTime = unlocked ? time : null;
         }
