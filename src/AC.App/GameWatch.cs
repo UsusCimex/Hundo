@@ -99,10 +99,16 @@ public sealed class GameWatch : ObservableObject, IDisposable
             if (_main.IsBusy) return;
             var changes = _play.TakeChanges();
             _main.Session.Update();
-            if (_main.Game is { } played && changes.Stopped.Contains(played.AppId) && _svc.Settings.HasApiKey)
+            if (_main.Game is { } played && changes.Stopped.Contains(played.AppId))
             {
-                var session = _play.LastSession(played.AppId);
-                _ = _main.SafeAsync(() => AfterSessionAsync(played, session));
+                // Unlocks of the game's last moments may have come after the last look: read once more, and the
+                // session's summary takes them in.
+                if (_svc.Settings.HasApiKey || _svc.Bridge.Exists) _ = ReadAsync();
+                if (_svc.Settings.HasApiKey)
+                {
+                    var session = _play.LastSession(played.AppId);
+                    _ = _main.SafeAsync(() => AfterSessionAsync(played, session));
+                }
             }
             if (AutoFollow && changes.Started.Count > 0 && (_main.Game is null || !running.Contains(_main.Game.AppId)))
             {
