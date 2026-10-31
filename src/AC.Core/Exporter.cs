@@ -22,9 +22,14 @@ public static class Exporter
         GameLogic.BuildRows(game, Percentile.P50)
             .Where(r => scope == ExportScope.All || r.Status == EffectiveStatus.ManualDone);
 
-    /// <summary>CSV with a ";" separator (Russian Excel) and a UTF-8 BOM to avoid mojibake.</summary>
+    /// <summary>
+    /// CSV with a ";" separator (Russian Excel) and a UTF-8 BOM to avoid mojibake. Fractions go with a decimal comma
+    /// unless the separator is a comma: with a ";" one Excel reads "5.3" as the 5th of March.
+    /// </summary>
     public static byte[] ToCsv(GameData game, ExportScope scope, char separator = ';')
     {
+        var decimals = (NumberFormatInfo)CultureInfo.InvariantCulture.NumberFormat.Clone();
+        if (separator != ',') decimals.NumberDecimalSeparator = ",";
         var sb = new StringBuilder();
         string[] header = { "api_name", "name", "status", "date", "kind", "group", "global_pct", "note" };
         sb.AppendLine(string.Join(separator, header));
@@ -38,7 +43,7 @@ public static class Exporter
                 r.UnlockTime?.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) ?? "",
                 r.Kind.ToString().ToLowerInvariant(),
                 r.Group,
-                r.Def.Percent?.ToString("0.0", CultureInfo.InvariantCulture) ?? "",
+                r.Def.Percent?.ToString("0.0", decimals) ?? "",
                 r.Note,
             };
             sb.AppendLine(string.Join(separator, fields.Select(f => Escape(f, separator))));

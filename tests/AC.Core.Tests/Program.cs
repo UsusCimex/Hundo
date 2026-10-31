@@ -404,6 +404,11 @@ static class Tests
         Assert.Equal(2, lines.Length);
         Assert.True(lines[1].Contains("\"сделал; но \"\"не засчиталось\"\"\""), lines[1]);
         Assert.True(lines[1].Contains("done_not_counted"));
+
+        // With ";" the percentage has a decimal comma: Excel would read 50.0 as a date. With "," it keeps the point.
+        Assert.True(lines[1].Contains(";50,0;"), lines[1]);
+        var comma = Encoding.UTF8.GetString(Exporter.ToCsv(g, ExportScope.ManualOnly, ',')).Split(Environment.NewLine)[1];
+        Assert.True(comma.Contains(",50.0,"), comma);
     }
 
     public static void TagPack_RoundTrip()
