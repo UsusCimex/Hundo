@@ -130,6 +130,8 @@ Copy-Item (Resolve-Path $DataDir) $data -Recurse
 $settingsPath = Join-Path $data "settings.json"
 $settings = Get-Content $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $settings | Add-Member -NotePropertyName Theme -NotePropertyValue $Theme -Force
+# Closed to the tray, the copy would stay running, show the tray balloon on the user's screen and leave an icon.
+$settings | Add-Member -NotePropertyName CloseToTray -NotePropertyValue $false -Force
 foreach ($pair in ($Set -split ";" | Where-Object { $_ })) {
     $key, $value = $pair -split "=", 2
     try { $value = $value | ConvertFrom-Json } catch { }
