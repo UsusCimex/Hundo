@@ -80,9 +80,10 @@ jobs:
           echo "title=$(git tag -l --format='%(contents:subject)' "$tag")" >> "$GITHUB_OUTPUT"
           git tag -l --format='%(contents:body)' "$tag" > notes.md
 
+      # A third-party action with write access to the release: pinned to a commit, not a movable tag.
       - name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           name: ${{ steps.notes.outputs.title }}
           body_path: notes.md
