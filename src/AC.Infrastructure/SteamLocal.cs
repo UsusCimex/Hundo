@@ -4,6 +4,7 @@ using System.Runtime.Versioning;
 using AC.Core;
 using AC.Core.SteamFormats;
 using Microsoft.Win32;
+using Microsoft.Win32.SafeHandles;
 
 namespace AC.Infrastructure;
 
@@ -76,7 +77,7 @@ public static class SteamLocal
                         {
                             if (TextVdf.AppManifest(File.ReadAllText(file)) is { } m &&
                                 File.Exists(Path.Combine(stats, $"UserGameStatsSchema_{m.AppId}.bin")))
-                                games[m.AppId] = Path.GetFullPath(Path.Combine(apps, "common", m.InstallDir));
+                                games[m.AppId] = FinalPath(Path.GetFullPath(Path.Combine(apps, "common", m.InstallDir)));
                         }
                         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { }
                     }
@@ -87,6 +88,30 @@ public static class SteamLocal
         _installed = new InstalledCache(DateTime.UtcNow, games);
         return games;
     }
+
+    /// <summary>
+    /// The folder with links resolved, as a process started from it reports its file: a library or a game moved to
+    /// another drive and left behind a junction. The path as it is when the folder is missing.
+    /// </summary>
+    private static string FinalPath(string folder)
+    {
+        using var h = CreateFileW(folder, 0, FileShareAll, IntPtr.Zero, OpenExisting, FileFlagBackupSemantics, IntPtr.Zero);
+        if (h.IsInvalid) return folder;
+        var name = new char[1024];
+        uint n = GetFinalPathNameByHandleW(h, name, (uint)name.Length, 0);
+        if (n == 0 || n >= name.Length) return folder;
+        var path = new string(name, 0, (int)n);
+        return path.StartsWith(@"\\?\UNC\", StringComparison.Ordinal) ? @"\\" + path[8..]
+            : path.StartsWith(@"\\?\", StringComparison.Ordinal) ? path[4..] : path;
+    }
+
+    private const uint FileShareAll = 7, OpenExisting = 3, FileFlagBackupSemantics = 0x02000000;
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandleW(SafeFileHandle file, [Out] char[] path, uint size, uint flags);
 
     /// <summary>The program files of the running processes; ones that do not let even that be read are skipped.</summary>
     private static List<string> ProcessPaths()
