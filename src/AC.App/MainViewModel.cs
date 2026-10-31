@@ -1324,10 +1324,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// Of the games started, the one to open: an installed game before one known only from Steam's registry, such as
-    /// Spacewar started by an online fix next to the game.
+    /// Spacewar started by an online fix next to the game; of installed ones, the one Steam names.
     /// </summary>
-    private static uint Followed(IReadOnlyCollection<uint> started) =>
-        started.OrderByDescending(a => SteamLocal.InstalledGames().ContainsKey(a)).First();
+    private static uint Followed(IReadOnlyCollection<uint> started)
+    {
+        var installed = SteamLocal.InstalledGames();
+        uint named = SteamLocal.NamedAppId();
+        return started.OrderByDescending(a => installed.ContainsKey(a)).ThenByDescending(a => a == named).First();
+    }
 
     /// <summary>
     /// A game seen running for less is not taken as played: Steam names a game while the app reads its status through

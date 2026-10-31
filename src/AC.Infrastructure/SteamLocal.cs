@@ -35,22 +35,31 @@ public static class SteamLocal
     {
         if (Environment.GetEnvironmentVariable("AC_RUNNING_APPID") is { } fake)
             return fake.Split(',', StringSplitOptions.TrimEntries).Select(s => uint.TryParse(s, out var id) ? id : 0).Where(id => id != 0).ToHashSet();
-        var running = RunningGames.ByProcess(ProcessPaths(), InstalledGames());
-        if (Registry.GetValue(SteamKey, "RunningAppID", 0) is int named and > 0) running.Add((uint)named);
+        uint named = NamedAppId();
+        var running = RunningGames.ByProcess(ProcessPaths(), InstalledGames(), named);
+        if (named != 0) running.Add(named);
         return running;
     }
+
+    /// <summary>The game Steam names as running in the registry; 0 - none.</summary>
+    public static uint NamedAppId() => Registry.GetValue(SteamKey, "RunningAppID", 0) is int id and > 0 ? (uint)id : 0;
 
     private sealed record InstalledCache(DateTime At, IReadOnlyDictionary<uint, string> Games);
     private static InstalledCache? _installed;
     private static readonly TimeSpan InstalledTtl = TimeSpan.FromMinutes(5);
 
-    /// <summary>Installed games and their folders, from the app manifests of the Steam libraries; read again after a few minutes.</summary>
+    /// <summary>
+    /// Installed games with achievements and their folders, from the app manifests of the Steam libraries; read again
+    /// after a few minutes. Apps without an achievement schema in Steam's cache are left out: the tools that run in the
+    /// background (Wallpaper Engine) or next to a game (the Steamworks redistributables at its first start).
+    /// </summary>
     public static IReadOnlyDictionary<uint, string> InstalledGames()
     {
         if (_installed is { } cache && DateTime.UtcNow - cache.At < InstalledTtl) return cache.Games;
         var games = new Dictionary<uint, string>();
         if (SteamPath() is { } steam)
         {
+            var stats = Path.Combine(steam, "appcache", "stats");
             var libraries = new List<string> { steam };
             try { libraries.AddRange(TextVdf.LibraryPaths(File.ReadAllText(Path.Combine(steam, "steamapps", "libraryfolders.vdf")))); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
@@ -62,7 +71,8 @@ public static class SteamLocal
                 {
                     try
                     {
-                        if (TextVdf.AppManifest(File.ReadAllText(file)) is { } m)
+                        if (TextVdf.AppManifest(File.ReadAllText(file)) is { } m &&
+                            File.Exists(Path.Combine(stats, $"UserGameStatsSchema_{m.AppId}.bin")))
                             games[m.AppId] = Path.GetFullPath(Path.Combine(apps, "common", m.InstallDir));
                     }
                     catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }

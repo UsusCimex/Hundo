@@ -691,6 +691,16 @@ static class Tests
         var running = RunningGames.ByProcess(
             [@"d:\steamlibrary\steamapps\common\We Were Here Tomorrow\Bin\WWHT.exe", @"C:\Windows\explorer.exe"], dirs);
         Assert.Equal("2315050", string.Join(",", running));
+
+        // A game and its episodes in one folder: only the one Steam names runs, none when it names another.
+        dirs = new Dictionary<uint, string>
+        {
+            [220] = @"C:\Steam\steamapps\common\Half-Life 2",
+            [420] = @"C:\Steam\steamapps\common\Half-Life 2\",
+        };
+        string[] hl2 = [@"C:\Steam\steamapps\common\Half-Life 2\hl2.exe"];
+        Assert.Equal("420", string.Join(",", RunningGames.ByProcess(hl2, dirs, named: 420)));
+        Assert.Equal("", string.Join(",", RunningGames.ByProcess(hl2, dirs, named: 480)));
     }
 
     public static void SteamHunters_Parse()

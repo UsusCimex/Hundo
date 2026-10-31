@@ -70,16 +70,19 @@ public static class RunningGames
 {
     /// <summary>
     /// Installed games with a process started from their folder. Steam names only one running game, and with two at
-    /// once (a game and Spacewar started by an online fix) the other one would go unnoticed.
+    /// once (a game and Spacewar started by an online fix) the other one would go unnoticed. Games sharing a folder
+    /// (a game and its episodes) cannot be told apart by the process: of them only the one Steam names runs.
     /// </summary>
-    public static HashSet<uint> ByProcess(IEnumerable<string> processPaths, IReadOnlyDictionary<uint, string> installDirs)
+    /// <param name="named">The game Steam names as running; 0 - none.</param>
+    public static HashSet<uint> ByProcess(IEnumerable<string> processPaths, IReadOnlyDictionary<uint, string> installDirs, uint named = 0)
     {
         var paths = processPaths.ToList();
         var running = new HashSet<uint>();
-        foreach (var (app, dir) in installDirs)
+        foreach (var folder in installDirs.GroupBy(d => d.Value.TrimEnd('\\', '/') + '\\', d => d.Key, StringComparer.OrdinalIgnoreCase))
         {
-            var folder = dir.TrimEnd('\\', '/') + '\\';
-            if (paths.Any(p => p.StartsWith(folder, StringComparison.OrdinalIgnoreCase))) running.Add(app);
+            if (!paths.Any(p => p.StartsWith(folder.Key, StringComparison.OrdinalIgnoreCase))) continue;
+            if (folder.Count() == 1) running.Add(folder.First());
+            else if (folder.Contains(named)) running.Add(named);
         }
         return running;
     }
