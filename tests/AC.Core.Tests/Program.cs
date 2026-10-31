@@ -708,6 +708,20 @@ static class Tests
         Assert.True(!AC.Infrastructure.GameService.OtherAccount(account + 1, 0), "no account in the settings");
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Steam_ReadsStatusOnlyWhenItMayHaveChanged()
+    {
+        // A read through the Steam client shows the user in the game: browsing the library must not do it each time.
+        var read = new DateTimeOffset(2026, 10, 31, 12, 0, 0, TimeSpan.Zero);
+        bool May(DateTimeOffset? at, DateTimeOffset? written, bool running = false) =>
+            AC.Infrastructure.GameService.StatusMayHaveChanged(at, written, running);
+        Assert.True(May(null, null), "never read");
+        Assert.True(!May(read, null), "read, no stats file");
+        Assert.True(!May(read, read.AddSeconds(20)), "the stats file written by the read itself");
+        Assert.True(May(read, read.AddHours(3)), "played since the read");
+        Assert.True(May(read, read.AddDays(-1), running: true), "running now");
+    }
+
     public static void Vdf_LoginUsers()
     {
         const string vdf = """

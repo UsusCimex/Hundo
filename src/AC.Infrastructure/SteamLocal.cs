@@ -183,6 +183,15 @@ public static class SteamLocal
 
     public static uint AccountId(ulong steamId64) => (uint)(steamId64 - SteamId64Base);
 
+    /// <summary>When Steam last wrote the player's stats of a game; null - no such file.</summary>
+    public static DateTimeOffset? StatsWrittenAt(ulong steamId64, uint appId)
+    {
+        var dir = StatsDir();
+        if (dir is null || steamId64 < SteamId64Base) return null;
+        var file = new FileInfo(Path.Combine(dir, UserStatsFileName(steamId64, appId)));
+        return file.Exists ? file.LastWriteTimeUtc : null;
+    }
+
     public static string UserStatsFileName(ulong steamId64, uint appId) => $"UserGameStats_{AccountId(steamId64)}_{appId}.bin";
 }
 

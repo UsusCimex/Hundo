@@ -638,6 +638,19 @@ public sealed class GameService
     }
 
     /// <summary>
+    /// Whether opening a game reads its status through the Steam client, which shows the user in that game to friends
+    /// for a moment: only for a game never read, a running one, or one whose stats Steam has written since the read.
+    /// </summary>
+    public bool StatusMayHaveChanged(GameData game, bool running) =>
+        StatusMayHaveChanged(game.StateFetchedAt, SteamLocal.StatsWrittenAt(Settings.SteamId64, game.AppId), running);
+
+    internal static bool StatusMayHaveChanged(DateTimeOffset? readAt, DateTimeOffset? statsWrittenAt, bool running) =>
+        readAt is null || running || statsWrittenAt > readAt + StatsWriteLag;
+
+    // Steam may write the stats file a moment after a read through the client: that is not a change.
+    private static readonly TimeSpan StatsWriteLag = TimeSpan.FromMinutes(1);
+
+    /// <summary>
     /// The helper reads and writes as whoever is signed in to the Steam client: another account than the one in the
     /// settings would get the marks, and its status would mix into this one's. null - the same, or nothing to compare.
     /// </summary>

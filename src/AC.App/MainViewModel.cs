@@ -532,9 +532,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 : Loc.Plural("status.gameLoaded", report.Game.Achievements.Count);
             AnnounceNew(report.NewlyUnlocked);
         });
-        // With the "Steam client" source the load skipped the status, so read it now.
-        if (seq == _loadSeq && _game?.AppId == appId &&
-            (_svc.Settings.StatusSource == StatusSource.SteamClient || !_svc.HasApiKey) && _svc.Bridge.Exists)
+        // With the "Steam client" source the load skipped the status, so read it now, unless nothing can have changed:
+        // browsing the library would show the user in every game opened.
+        if (seq == _loadSeq && _game is { } opened && opened.AppId == appId &&
+            (_svc.Settings.StatusSource == StatusSource.SteamClient || !_svc.HasApiKey) && _svc.Bridge.Exists &&
+            _svc.StatusMayHaveChanged(opened, _sessions.IsRunning(appId)))
             await SafeAsync(RefreshStateAsync);
 
         // Neither Steam nor Steam Hunters has percentages (a new game): collect player statistics ourselves.
