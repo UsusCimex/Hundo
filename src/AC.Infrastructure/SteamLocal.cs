@@ -65,18 +65,23 @@ public static class SteamLocal
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             foreach (var library in libraries.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                var apps = Path.Combine(library, "steamapps");
-                if (!Directory.Exists(apps)) continue;
-                foreach (var file in Directory.EnumerateFiles(apps, "appmanifest_*.acf"))
+                // A library on a drive that is gone or locked, or a manifest Steam is rewriting: the others still count.
+                try
                 {
-                    try
+                    var apps = Path.Combine(library, "steamapps");
+                    if (!Directory.Exists(apps)) continue;
+                    foreach (var file in Directory.EnumerateFiles(apps, "appmanifest_*.acf"))
                     {
-                        if (TextVdf.AppManifest(File.ReadAllText(file)) is { } m &&
-                            File.Exists(Path.Combine(stats, $"UserGameStatsSchema_{m.AppId}.bin")))
-                            games[m.AppId] = Path.GetFullPath(Path.Combine(apps, "common", m.InstallDir));
+                        try
+                        {
+                            if (TextVdf.AppManifest(File.ReadAllText(file)) is { } m &&
+                                File.Exists(Path.Combine(stats, $"UserGameStatsSchema_{m.AppId}.bin")))
+                                games[m.AppId] = Path.GetFullPath(Path.Combine(apps, "common", m.InstallDir));
+                        }
+                        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { }
                     }
-                    catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
                 }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { }
             }
         }
         _installed = new InstalledCache(DateTime.UtcNow, games);

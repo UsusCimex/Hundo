@@ -21,7 +21,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private DateTime _lastPoll = DateTime.MinValue;
     private bool _refreshing;
     private IReadOnlySet<uint> _lastRunning = new HashSet<uint>();
-    private readonly SessionTracker _sessions;
+    /// <summary>Started over by the first look at the running games, when the window opens.</summary>
+    private SessionTracker _sessions = new([], DateTimeOffset.Now);
+    private bool _scanning;
+    private bool _scanFailed;
+    private string? _tickError;
     /// <summary>Sessions that ended while something loaded: they are acted on once it is done.</summary>
     private readonly List<PlaySession> _ended = new();
     /// <summary>The last session seen from its start: its summary stays until dismissed or the next session starts.</summary>
@@ -78,14 +82,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OpenGuideTipCommand = new RelayCommand(p => OpenUrl(p is AchievementRowViewModel r ? GuideTipFor(r.ApiName)?.Url : null));
         TranslateTipCommand = new AsyncCommand(p => TranslateTipAsync(p as AchievementRowViewModel), OnError);
 
-        IReadOnlySet<uint> runningAtStart = new HashSet<uint>();
-        try { runningAtStart = SteamLocal.RunningAppIds(); }
-        catch { }
-        _sessions = new SessionTracker(runningAtStart, DateTimeOffset.Now);
-
         _runningTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
-        _runningTimer.Tick += async (_, _) => await OnRunningTickAsync();
-        _runningTimer.Start();
+        _runningTimer.Tick += async (_, _) =>
+        {
+            // An error here would come back every tick: logged once and shown in the status line, not in a message
+            // box over the game.
+            try
+            {
+                await OnRunningTickAsync();
+            }
+            catch (Exception e)
+            {
+                if (_tickError != e.Message) AppLog.Error("Running games", e);
+                _tickError = e.Message;
+                StatusMessage = Loc.T("status.error", e.Message);
+            }
+        };
 
         FillLibrary(svc.CachedLibrary());
     }
@@ -444,6 +456,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public async Task StartAsync()
     {
+        // The games already running when the app starts: their sessions began earlier and are not reported.
+        var running = await ScanRunningAsync() ?? new HashSet<uint>();
+        _sessions = new SessionTracker(running, DateTimeOffset.Now);
+        _runningTimer.Start();
+
         if (!_svc.HasApiKey)
         {
             StatusMessage = Loc.T("status.noKey");
@@ -453,7 +470,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             await SafeAsync(RefreshLibraryAsync);
         }
 
-        var running = SteamLocal.RunningAppIds();
         var last = _svc.Settings.LastAppId;
         var start = running.Count == 0 || running.Contains(last) ? last : Followed(running);
         if (start != 0) await SafeAsync(() => LoadAsync(start, Library.FirstOrDefault(g => g.AppId == start)?.Name));
@@ -492,7 +508,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         LoadReport? loaded = null;
         await Busy(Loc.T("status.loadingGame", name ?? appId.ToString()), async () =>
         {
-            var report = await _svc.LoadGameAsync(appId, name);
+            var report = await _svc.LoadGameAsync(appId, name, running: _sessions.IsRunning(appId));
             if (seq != _loadSeq) return; // another game picked while loading
             loaded = report;
             SetGame(report.Game);
@@ -654,7 +670,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         await Busy(Loc.T("status.reloading"), async () =>
         {
             var seq = ++_loadSeq;
-            var report = await _svc.LoadGameAsync(_game.AppId, _game.Name, forceSchema: force);
+            var report = await _svc.LoadGameAsync(_game.AppId, _game.Name, forceSchema: force, running: _sessions.IsRunning(_game.AppId));
             if (seq != _loadSeq) return;
             SetGame(report.Game);
             StatusMessage = report.Warnings.Count > 0 ? string.Join(" | ", report.Warnings) : Loc.T("status.reloaded");
@@ -1279,9 +1295,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private async Task OnRunningTickAsync()
     {
-        IReadOnlySet<uint> running;
-        try { running = SteamLocal.RunningAppIds(); }
-        catch { return; }
+        if (_scanning || await ScanRunningAsync() is not { } running) return;
 
         // Every tick, busy or not: starts and ends are stamped when seen, and a pause between looks is taken for sleep.
         _ended.AddRange(_sessions.Observe(running, DateTimeOffset.Now));
@@ -1323,6 +1337,31 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// The running games, looked up off the UI thread: the scan opens every process and, every few minutes, reads the
+    /// app manifests of all libraries. null - it failed (logged once).
+    /// </summary>
+    private async Task<IReadOnlySet<uint>?> ScanRunningAsync()
+    {
+        _scanning = true;
+        try
+        {
+            var running = await Task.Run(SteamLocal.RunningAppIds);
+            _scanFailed = false;
+            return running;
+        }
+        catch (Exception e)
+        {
+            if (!_scanFailed) AppLog.Error("Running games", e);
+            _scanFailed = true;
+            return null;
+        }
+        finally
+        {
+            _scanning = false;
+        }
+    }
+
+    /// <summary>
     /// Of the games started, the one to open: an installed game before one known only from Steam's registry, such as
     /// Spacewar started by an online fix next to the game; of installed ones, the one Steam names.
     /// </summary>
@@ -1361,7 +1400,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private async Task AfterSessionAsync(GameData game, PlaySession? session)
     {
         await Task.Delay(TimeSpan.FromMinutes(2));
-        if (_game != game || IsBusy || SteamLocal.RunningAppIds().Contains(game.AppId)) return;
+        if (_game != game || IsBusy || _sessions.IsRunning(game.AppId)) return;
         try
         {
             await _svc.RefreshPlaytimeAsync(game, session);

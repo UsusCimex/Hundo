@@ -101,7 +101,9 @@ public sealed class GameService
     /// Loads a game: schema (from the cache if fresh), global %, the local Steam schema,
     /// player status from the Web API. A failed step does not fail the load but goes to Warnings.
     /// </summary>
-    public async Task<LoadReport> LoadGameAsync(uint appId, string? knownName = null, bool forceSchema = false, CancellationToken ct = default)
+    /// <param name="running">The game is running: Steam's playtime shows only part of the session.</param>
+    public async Task<LoadReport> LoadGameAsync(uint appId, string? knownName = null, bool forceSchema = false, bool running = false,
+        CancellationToken ct = default)
     {
         var warnings = new List<string>();
         var game = _store.LoadGame(appId) ?? new GameData { AppId = appId, Name = knownName ?? "" };
@@ -181,7 +183,7 @@ public sealed class GameService
         {
             try
             {
-                await RefreshPlaytimeAsync(game, ct: ct);
+                await RefreshPlaytimeAsync(game, running: running, ct: ct);
             }
             catch (Exception e) when (e is SteamApiException or HttpRequestException or TaskCanceledException)
             {
@@ -227,14 +229,14 @@ public sealed class GameService
     /// playtime two weeks back (from Steam's "last two weeks"): the pace then skips stretches without progress.
     /// A session the app saw from its start adds its start too: the play since the last unlock is then known exactly.
     /// </summary>
-    public async Task RefreshPlaytimeAsync(GameData game, PlaySession? session = null, CancellationToken ct = default)
+    /// <param name="running">The game is running: mid-session Steam has not counted all of it yet.</param>
+    public async Task RefreshPlaytimeAsync(GameData game, PlaySession? session = null, bool running = false, CancellationToken ct = default)
     {
         RequireKey();
         var own = await _api.GetOwnedGameAsync(ApiKey, Settings.SteamId64, game.AppId, ct);
         if (own is null) return;
         game.PlaytimeMinutes = own.PlaytimeMinutes;
-        // Mid-session Steam has not counted the current session yet.
-        if (!SteamLocal.RunningAppIds().Contains(game.AppId))
+        if (!running)
         {
             var now = DateTimeOffset.Now;
             Progress.AddPlaytime(game, now.AddDays(-14), own.PlaytimeMinutes - own.Playtime2WeeksMinutes);
