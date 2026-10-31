@@ -101,6 +101,13 @@ public partial class OverlayWindow : Window
         if (!_vm.IsInteractive) SavePosition();
     }
 
+    /// <summary>Hides it out of click mode: shown again, it would still catch the clicks meant for the game.</summary>
+    public void HideToGame()
+    {
+        if (_vm.IsInteractive) ToggleInteractive();
+        Hide();
+    }
+
     public void ShowToast(string text)
     {
         _vm.Toast = text;

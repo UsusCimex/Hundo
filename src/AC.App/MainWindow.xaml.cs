@@ -62,7 +62,7 @@ public partial class MainWindow : Window
     private void ToggleOverlay()
     {
         var o = EnsureOverlay();
-        if (o.IsVisible) o.Hide();
+        if (o.IsVisible) o.HideToGame();
         else o.Show();
     }
 
