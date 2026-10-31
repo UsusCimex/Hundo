@@ -1232,7 +1232,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void Reveal(string apiName)
     {
         if (_game is null || !_revealed.Add(RevealKey(_game.AppId, apiName))) return;
-        foreach (var vm in Rows)
+        foreach (var vm in Rows.Concat(OverlayNearest).Concat(OverlayMissable))
             if (vm.ApiName == apiName) vm.RefreshSpoiler();
     }
 
