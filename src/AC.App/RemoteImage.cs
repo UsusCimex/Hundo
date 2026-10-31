@@ -74,13 +74,18 @@ public static class RemoteImage
 /// </summary>
 internal static class ImageCache
 {
-    private const int MemoryLimit = 800;
+    // Decoded, a 1920x1080 picture takes 8 MB: memory keeps the latest ones within a budget, not a count.
+    private const long MemoryLimitBytes = 128L * 1024 * 1024;
+    // A picture shown at its own size is decoded smaller past this: a tall guide infographic would take hundreds of MB.
+    private const long MaxPixels = 4096L * 4096;
     private const long DiskLimitBytes = 300L * 1024 * 1024;
     private const long DiskTrimToBytes = 200L * 1024 * 1024;
 
     // A picture from a stranger's guide may be anything: a bigger answer is dropped, not kept in memory.
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20), MaxResponseContentBufferSize = 20 * 1024 * 1024 };
     private static readonly Dictionary<string, BitmapSource> Memory = new();
+    private static readonly Queue<string> MemoryOrder = new();
+    private static long _memoryBytes;
     private static readonly Dictionary<string, Task<byte[]?>> Downloads = new();
     private static readonly Dictionary<string, DateTime> Failed = new();
     private static readonly Dictionary<string, (int Width, int Height)> Sizes = new();
@@ -92,7 +97,8 @@ internal static class ImageCache
     /// <summary>The size of the file's picture in pixels, known once it has been loaded at any width.</summary>
     public static (int Width, int Height)? SizeOf(string url) => Sizes.TryGetValue(url, out var size) ? size : null;
 
-    public static async Task<BitmapSource?> GetAsync(string url, int width)
+    /// <param name="keep">False for a picture shown once (the viewer): it does not push the list icons out of memory.</param>
+    public static async Task<BitmapSource?> GetAsync(string url, int width, bool keep = true)
     {
         var key = Key(url, width);
         if (Memory.TryGetValue(key, out var hit)) return hit;
@@ -119,11 +125,23 @@ internal static class ImageCache
             try { File.Delete(PathOf(url)); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             return null;
         }
-        if (Memory.Count >= MemoryLimit) Memory.Clear();
-        Memory[key] = image;
+        if (keep) Remember(key, image);
         Sizes[url] = decoded.Size;
         return image;
     }
+
+    private static void Remember(string key, BitmapSource image)
+    {
+        if (!Memory.TryAdd(key, image)) return;
+        MemoryOrder.Enqueue(key);
+        _memoryBytes += BytesOf(image);
+        while (_memoryBytes > MemoryLimitBytes && MemoryOrder.Count > 1)
+        {
+            if (Memory.Remove(MemoryOrder.Dequeue(), out var old)) _memoryBytes -= BytesOf(old);
+        }
+    }
+
+    private static long BytesOf(BitmapSource image) => (long)image.PixelWidth * image.PixelHeight * ((image.Format.BitsPerPixel + 7) / 8);
 
     /// <summary>Trims an oversized disk cache, oldest first. In background, at startup.</summary>
     public static void TrimInBackground() => Task.Run(() =>
@@ -193,10 +211,14 @@ internal static class ImageCache
             // The header alone gives the size: a picture decoded smaller no longer tells it.
             var frame = BitmapDecoder.Create(new MemoryStream(bytes), BitmapCreateOptions.DelayCreation | BitmapCreateOptions.IgnoreColorProfile,
                 BitmapCacheOption.None).Frames[0];
+            // Never wider than the file: an upscaled icon takes four times the memory for nothing.
+            int decodeWidth = width > 0 && width < frame.PixelWidth ? width : 0;
+            long pixels = (long)frame.PixelWidth * frame.PixelHeight;
+            if (decodeWidth == 0 && pixels > MaxPixels) decodeWidth = Math.Max(1, (int)(frame.PixelWidth * Math.Sqrt((double)MaxPixels / pixels)));
             var image = new BitmapImage();
             image.BeginInit();
             image.StreamSource = new MemoryStream(bytes);
-            if (width > 0) image.DecodePixelWidth = width;
+            if (decodeWidth > 0) image.DecodePixelWidth = decodeWidth;
             image.CacheOption = BitmapCacheOption.OnLoad;
             // No IgnoreImageCache: the WPF cache is keyed by URL, which a stream lacks; it throws ArgumentNullException.
             image.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;

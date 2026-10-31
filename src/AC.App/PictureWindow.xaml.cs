@@ -39,7 +39,7 @@ public partial class PictureWindow : Window
         Picture.Source = null;
         Fit();
         Status.Text = Loc.T("picture.loading");
-        var image = await ImageCache.GetAsync(picture.Url, 0);
+        var image = await ImageCache.GetAsync(picture.Url, 0, keep: false);
         if (_current != picture) return;
         Picture.Source = image;
         Status.Text = image is null ? Loc.T("picture.failed") : "";
