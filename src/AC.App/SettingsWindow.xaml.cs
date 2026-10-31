@@ -31,6 +31,7 @@ public partial class SettingsWindow : Window
         CheckUpdatesBox.IsChecked = s.CheckUpdates;
         ToggleHotkeyBox.Text = s.OverlayToggleHotkey;
         InteractHotkeyBox.Text = s.OverlayInteractHotkey;
+        OverlayAutoBox.IsChecked = s.OverlayAuto;
         OpacitySlider.Value = s.OverlayOpacity;
         NearestBox.Text = s.OverlayNearestCount.ToString(CultureInfo.InvariantCulture);
         PollBox.Text = s.PollSeconds.ToString(CultureInfo.InvariantCulture);
@@ -122,6 +123,7 @@ public partial class SettingsWindow : Window
         s.CheckUpdates = CheckUpdatesBox.IsChecked == true;
         s.OverlayToggleHotkey = ToggleHotkeyBox.Text.Trim();
         s.OverlayInteractHotkey = InteractHotkeyBox.Text.Trim();
+        s.OverlayAuto = OverlayAutoBox.IsChecked == true;
         s.OverlayOpacity = OpacitySlider.Value;
         if (int.TryParse(NearestBox.Text.Trim(), out var n) && n is > 0 and <= 20) s.OverlayNearestCount = n;
         if (int.TryParse(PollBox.Text.Trim(), out var poll) && poll >= 15) s.PollSeconds = poll;

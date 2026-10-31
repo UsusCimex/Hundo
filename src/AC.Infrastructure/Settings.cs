@@ -88,6 +88,8 @@ public sealed class AppSettings
     public double OverlayTop { get; set; } = 120;
     public double OverlayOpacity { get; set; } = 0.85;
     public int OverlayNearestCount { get; set; } = 5;
+    /// <summary>The overlay shows itself when the open game starts and for a message, and hides when the game closes.</summary>
+    public bool OverlayAuto { get; set; } = true;
 
     /// <summary>How often to poll the Web API while playing, seconds (if the stats file is unchanged).</summary>
     public int PollSeconds { get; set; } = 60;

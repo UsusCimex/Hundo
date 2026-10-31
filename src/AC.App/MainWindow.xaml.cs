@@ -22,7 +22,8 @@ public partial class MainWindow : Window
         WindowFit.ToWorkArea(this);
         _vm = new MainViewModel(GameService.CreateDefault());
         DataContext = _vm;
-        _vm.Toast += text => _overlay?.ShowToast(text);
+        _vm.Toast += OnToast;
+        _vm.PlayingChanged += OnPlayingChanged;
         Loaded += async (_, _) =>
         {
             await _vm.StartAsync();
@@ -56,15 +57,55 @@ public partial class MainWindow : Window
         {
             _overlay = new OverlayWindow(_vm);
             _overlay.Closed += (_, _) => _overlay = null;
+            _overlay.ToastEnded += OnToastEnded;
         }
         return _overlay;
     }
 
     private void ToggleOverlay()
     {
+        _overlayForGame = _overlayForToast = false;
         var o = EnsureOverlay();
         if (o.IsVisible) o.HideToGame();
         else o.Show();
+    }
+
+    // Shown on its own for the game or for a message: hidden again on its own, unless the user toggled it since.
+    private bool _overlayForGame;
+    private bool _overlayForToast;
+
+    private void OnPlayingChanged(bool playing)
+    {
+        if (!_vm.Service.Settings.OverlayAuto) return;
+        var o = EnsureOverlay();
+        if (playing && !o.IsVisible)
+        {
+            o.Show();
+            _overlayForGame = true;
+        }
+        else if (!playing && (_overlayForGame || _overlayForToast))
+        {
+            o.HideToGame();
+            _overlayForGame = _overlayForToast = false;
+        }
+    }
+
+    /// <summary>A message mid-game shows the hidden overlay until the message goes.</summary>
+    private void OnToast(string text)
+    {
+        if (_vm.Service.Settings.OverlayAuto && _vm.Playing && EnsureOverlay() is { IsVisible: false } hidden)
+        {
+            hidden.Show();
+            _overlayForToast = true;
+        }
+        _overlay?.ShowToast(text);
+    }
+
+    private void OnToastEnded()
+    {
+        if (!_overlayForToast) return;
+        _overlayForToast = false;
+        if (!_overlayForGame) _overlay?.HideToGame();
     }
 
     private void OnToggleOverlay(object sender, RoutedEventArgs e) => ToggleOverlay();

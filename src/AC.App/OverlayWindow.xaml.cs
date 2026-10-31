@@ -70,7 +70,12 @@ public partial class OverlayWindow : Window
         InitializeComponent();
         _vm = new OverlayViewModel(main);
         DataContext = _vm;
-        _toastTimer.Tick += (_, _) => { _toastTimer.Stop(); _vm.Toast = ""; };
+        _toastTimer.Tick += (_, _) =>
+        {
+            _toastTimer.Stop();
+            _vm.Toast = "";
+            ToastEnded?.Invoke();
+        };
         Closed += (_, _) => { _toastTimer.Stop(); _vm.Detach(); };
         LocationChanged += (_, _) => FitHeight();
         DpiChanged += (_, _) => FitHeight();
@@ -112,6 +117,8 @@ public partial class OverlayWindow : Window
         if (_vm.IsInteractive) ToggleInteractive();
         Hide();
     }
+
+    public event Action? ToastEnded;
 
     public void ShowToast(string text)
     {

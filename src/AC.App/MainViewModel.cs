@@ -108,6 +108,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public GameData? Game => _game;
     public event Action<string>? Toast;
 
+    /// <summary>The open game started (true, once it has run for a while) or closed (false).</summary>
+    public event Action<bool>? PlayingChanged;
+
+    public bool Playing { get; private set; }
+
     // ---------- library ----------
 
     public ObservableCollection<LibraryItemViewModel> Library { get; } = new();
@@ -1373,6 +1378,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         CountDown();
         MarkDue();
+        UpdatePlaying(running);
+    }
+
+    /// <summary>
+    /// Steam names a game for the moment the app reads its status through the Steam client: a game counts as started
+    /// once it has run for a while.
+    /// </summary>
+    private static readonly TimeSpan PlayingAfterRunning = TimeSpan.FromSeconds(15);
+
+    private void UpdatePlaying(IReadOnlySet<uint> running)
+    {
+        bool playing = _game is { } game && running.Contains(game.AppId) &&
+                       _sessions.RunningFor(game.AppId, DateTimeOffset.Now) >= PlayingAfterRunning;
+        if (playing == Playing) return;
+        Playing = playing;
+        PlayingChanged?.Invoke(playing);
     }
 
     /// <summary>
