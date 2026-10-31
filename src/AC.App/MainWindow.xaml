@@ -438,6 +438,7 @@
                 </StackPanel>
 
                 <ListBox ItemsSource="{Binding LibraryView}" SelectedItem="{Binding SelectedLibraryGame}" HorizontalContentAlignment="Stretch"
+                         AutomationProperties.AutomationId="LibraryList"
                          Background="Transparent" BorderThickness="0"
                          VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.ScrollUnit="Pixel"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">

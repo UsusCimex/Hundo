@@ -492,6 +492,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         Library.Clear();
         foreach (var g in games) Library.Add(new LibraryItemViewModel(g, _summaries.GetValueOrDefault(g.AppId)) { ShowLeft = LibraryByTimeLeft });
+        ShowOpenInLibrary();
+    }
+
+    /// <summary>
+    /// The library list marks the open game however it was opened (at start, following the running game, by AppID):
+    /// otherwise it stays on the previous one, and a click on that one does not open it again.
+    /// </summary>
+    private void ShowOpenInLibrary()
+    {
+        var item = _game is { } open ? Library.FirstOrDefault(i => i.AppId == open.AppId) : null;
+        if (ReferenceEquals(item, _selectedLibraryGame)) return;
+        _selectedLibraryGame = item;
+        OnPropertyChanged(nameof(SelectedLibraryGame));
     }
 
     private async Task LoadAppIdAsync()
@@ -986,6 +999,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         PlaytimeOffsetInput = game.PlaytimeOffsetMinutes > 0 ? Hours(game.PlaytimeOffsetMinutes) : "";
         RestartWatcher();
         Recompute(rebuildRows: true);
+        ShowOpenInLibrary();
         OnPropertyChanged(nameof(Game));
         CommandManager.InvalidateRequerySuggested();
     }
