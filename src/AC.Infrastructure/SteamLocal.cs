@@ -29,13 +29,21 @@ public static class SteamLocal
     /// <summary>
     /// The games running now: the one Steam names in the registry and the installed ones with a process started from
     /// their folder (<see cref="RunningGames.ByProcess"/>). Steam names only one, and its per-app Running flags stay
-    /// set after a game closes. AC_RUNNING_APPID ("480,2315050") makes the app take those games for the only running
-    /// ones: to check what happens during play without a game.
+    /// set after a game closes. AC_RUNNING_APPID ("480,2315050", or a file with that, read on every look) makes the app
+    /// take those games for the only running ones: to check what happens during play, games starting and closing,
+    /// without a game.
     /// </summary>
     public static IReadOnlySet<uint> RunningAppIds()
     {
         if (Environment.GetEnvironmentVariable("AC_RUNNING_APPID") is { } fake)
+        {
+            if (File.Exists(fake))
+            {
+                try { fake = File.ReadAllText(fake); }
+                catch (IOException) { fake = ""; }
+            }
             return fake.Split(',', StringSplitOptions.TrimEntries).Select(s => uint.TryParse(s, out var id) ? id : 0).Where(id => id != 0).ToHashSet();
+        }
         uint named = NamedAppId();
         var running = RunningGames.ByProcess(ProcessPaths(), InstalledGames(), named);
         if (named != 0) running.Add(named);
