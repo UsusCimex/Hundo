@@ -1640,6 +1640,32 @@ static class Tests
         }
     }
 
+    public static void JsonStore_MovesOldDefaultHotkeysOnce()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ac-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new AC.Infrastructure.JsonStore(dir);
+            File.WriteAllText(Path.Combine(dir, "settings.json"), """{ "OverlayToggleHotkey": "Ctrl+Shift+A", "OverlayInteractHotkey": "F9" }""");
+            var s = store.LoadSettings();
+            Assert.Equal("Ctrl+Alt+H", s.OverlayToggleHotkey);
+            Assert.Equal("F9", s.OverlayInteractHotkey);
+            s.OverlayToggleHotkey = "Ctrl+Shift+A"; // chosen again after the upgrade
+            store.SaveSettings(s);
+            Assert.Equal("Ctrl+Shift+A", store.LoadSettings().OverlayToggleHotkey);
+
+            var fresh = new AC.Infrastructure.JsonStore(Path.Combine(dir, "new"));
+            var n = fresh.LoadSettings();
+            n.OverlayInteractHotkey = "Ctrl+Shift+S";
+            fresh.SaveSettings(n);
+            Assert.Equal("Ctrl+Shift+S", fresh.LoadSettings().OverlayInteractHotkey); // a new install's own choice
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
     public static void JsonStore_RoundTripAndLog()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ac-test-" + Guid.NewGuid().ToString("N"));

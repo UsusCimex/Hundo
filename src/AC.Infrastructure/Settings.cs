@@ -51,6 +51,12 @@ public enum AppTheme
 
 public sealed class AppSettings
 {
+    /// <summary>1 - the hotkeys moved off Ctrl+Shift+A and S.</summary>
+    public const int CurrentFormat = 1;
+
+    /// <summary>Settings saved by an older version are brought up to date once, see <see cref="Upgrade"/>.</summary>
+    public int Format { get; set; }
+
     public AppTheme Theme { get; set; } = AppTheme.System;
 
     /// <summary>API key encrypted with DPAPI (base64). Never stored as plain text.</summary>
@@ -76,8 +82,8 @@ public sealed class AppSettings
     public bool HideSpoilers { get; set; } = true;
     public char CsvSeparator { get; set; } = ';';
 
-    public string OverlayToggleHotkey { get; set; } = "Ctrl+Shift+A";
-    public string OverlayInteractHotkey { get; set; } = "Ctrl+Shift+S";
+    public string OverlayToggleHotkey { get; set; } = "Ctrl+Alt+H";
+    public string OverlayInteractHotkey { get; set; } = "Ctrl+Alt+J";
     public double OverlayLeft { get; set; } = 40;
     public double OverlayTop { get; set; } = 120;
     public double OverlayOpacity { get; set; } = 0.85;
@@ -93,4 +99,15 @@ public sealed class AppSettings
 
     /// <summary>Look for a new release on GitHub at startup.</summary>
     public bool CheckUpdates { get; set; } = true;
+
+    /// <summary>Brings settings of an older version up to date. True - they changed and are worth saving.</summary>
+    public bool Upgrade()
+    {
+        if (Format >= CurrentFormat) return false;
+        // The old defaults are crouch, sprint and strafe in many shooters: the overlay toggled mid-game.
+        if (OverlayToggleHotkey == "Ctrl+Shift+A") OverlayToggleHotkey = "Ctrl+Alt+H";
+        if (OverlayInteractHotkey == "Ctrl+Shift+S") OverlayInteractHotkey = "Ctrl+Alt+J";
+        Format = CurrentFormat;
+        return true;
+    }
 }

@@ -256,7 +256,7 @@
   "settings.interactKey": "Click mode",
   "settings.opacity": "Background opacity",
   "settings.nearest": "How many \"up next\" to show",
-  "settings.overlayHint": "Shortcuts like Ctrl+Shift+A. The overlay shows over windowed and borderless games, not over exclusive fullscreen.",
+  "settings.overlayHint": "Shortcuts like Ctrl+Alt+H. The overlay shows over windowed and borderless games, not over exclusive fullscreen.",
   "settings.dataTitle": "Data",
   "settings.openData": "Open folder",
   "settings.dataPortable": "Portable mode: data is kept in the data folder next to the app.",
@@ -316,7 +316,7 @@
   "dialog.noLoginUsers": "loginusers.vdf not found: Steam is not installed or nobody has signed in yet.",
   "dialog.accountFound": "Account found: {0}",
   "dialog.badSteamId": "SteamID64 is a 17-digit number starting with 7656119...",
-  "dialog.badHotkey": "Could not read the shortcut \"{0}\". Example: Ctrl+Shift+A",
+  "dialog.badHotkey": "Could not read the shortcut \"{0}\". Example: Ctrl+Alt+H",
   "dialog.flushQueue": {
     "one": "Write {0} queued achievement to Steam?",
     "other": "Write {0} queued achievements to Steam?"

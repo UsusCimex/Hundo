@@ -261,7 +261,7 @@
   "settings.interactKey": "Режим кликов",
   "settings.opacity": "Непрозрачность фона",
   "settings.nearest": "Сколько \"ближайших\" показывать",
-  "settings.overlayHint": "Сочетания вида Ctrl+Shift+A. Оверлей виден поверх игры в оконном режиме и в окне без рамки, в полноэкранном режиме - нет.",
+  "settings.overlayHint": "Сочетания вида Ctrl+Alt+H. Оверлей виден поверх игры в оконном режиме и в окне без рамки, в полноэкранном режиме - нет.",
   "settings.dataTitle": "Данные",
   "settings.openData": "Открыть папку",
   "settings.dataPortable": "Портативный режим: данные лежат в папке data рядом с программой.",
@@ -321,7 +321,7 @@
   "dialog.noLoginUsers": "Не найден loginusers.vdf: Steam не установлен или в него ещё не входили.",
   "dialog.accountFound": "Найден аккаунт: {0}",
   "dialog.badSteamId": "SteamID64 - это 17-значное число, начинается с 7656119...",
-  "dialog.badHotkey": "Не получилось разобрать сочетание \"{0}\". Пример: Ctrl+Shift+A",
+  "dialog.badHotkey": "Не получилось разобрать сочетание \"{0}\". Пример: Ctrl+Alt+H",
   "dialog.flushQueue": {
     "one": "Записать в Steam {0} достижение из очереди?",
     "few": "Записать в Steam {0} достижения из очереди?",

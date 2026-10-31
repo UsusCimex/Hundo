@@ -55,20 +55,23 @@ public sealed class JsonStore
     /// </summary>
     public AppSettings LoadSettings()
     {
-        if (!File.Exists(SettingsPath)) return new AppSettings();
+        if (!File.Exists(SettingsPath)) return new AppSettings { Format = AppSettings.CurrentFormat };
         var json = File.ReadAllText(SettingsPath);
+        AppSettings settings;
+        bool changed = false;
         try
         {
-            return JsonSerializer.Deserialize<AppSettings>(json, StoreJson.Pretty) ?? new AppSettings();
+            settings = JsonSerializer.Deserialize<AppSettings>(json, StoreJson.Pretty) ?? new AppSettings();
         }
         catch (JsonException)
         {
             KeepBroken(SettingsPath);
             // Written back at once: the next start would set another copy aside.
-            var settings = ReadableSettings(json);
-            SaveSettings(settings);
-            return settings;
+            settings = ReadableSettings(json);
+            changed = true;
         }
+        if (settings.Upgrade() || changed) SaveSettings(settings);
+        return settings;
     }
 
     private static AppSettings ReadableSettings(string json)
