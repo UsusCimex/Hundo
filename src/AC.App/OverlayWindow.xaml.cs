@@ -59,6 +59,8 @@ public sealed class OverlayViewModel : ObservableObject
 /// </summary>
 public partial class OverlayWindow : Window
 {
+    // The lists keep room for a few items even when the overlay is dragged low.
+    private const double MinRoom = 160;
     private readonly OverlayViewModel _vm;
     private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromSeconds(8) };
     private IntPtr _hwnd;
@@ -70,6 +72,8 @@ public partial class OverlayWindow : Window
         DataContext = _vm;
         _toastTimer.Tick += (_, _) => { _toastTimer.Stop(); _vm.Toast = ""; };
         Closed += (_, _) => { _toastTimer.Stop(); _vm.Detach(); };
+        LocationChanged += (_, _) => FitHeight();
+        DpiChanged += (_, _) => FitHeight();
         var s = main.Service.Settings;
         Left = s.OverlayLeft;
         Top = s.OverlayTop;
@@ -83,6 +87,7 @@ public partial class OverlayWindow : Window
         Native.SetExStyle(_hwnd, Native.WS_EX_TOOLWINDOW | Native.WS_EX_NOACTIVATE, 0);
         ApplyClickThrough();
         KeepOnScreen();
+        FitHeight();
     }
 
     public void ApplySettings()
@@ -142,6 +147,17 @@ public partial class OverlayWindow : Window
             Left = left + 40;
             Top = top + 120;
         }
+    }
+
+    /// <summary>
+    /// No taller than the screen below its top: with up to 20 items, taller still in click mode, it ran off the screen.
+    /// The lists scroll instead.
+    /// </summary>
+    private void FitHeight()
+    {
+        if (_hwnd == IntPtr.Zero || !Native.GetWindowRect(_hwnd, out var rect) || Native.WorkAreaOf(_hwnd) is not { } work) return;
+        double room = (work.Bottom - Math.Max(rect.Top, work.Top)) / VisualTreeHelper.GetDpi(this).DpiScaleY;
+        MaxHeight = Math.Max(MinRoom, room);
     }
 
     private void OnPanelMouseDown(object sender, MouseButtonEventArgs e)

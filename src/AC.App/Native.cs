@@ -40,6 +40,28 @@ internal static class Native
     /// </summary>
     public static void AllowAnyForeground() => AllowSetForegroundWindow(-1);
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT { public int Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MONITORINFO { public int Size; public RECT Monitor, Work; public uint Flags; }
+
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
+
+    /// <summary>The work area of the screen the window is on (the nearest one), in pixels.</summary>
+    public static RECT? WorkAreaOf(IntPtr hwnd)
+    {
+        var info = new MONITORINFO { Size = Marshal.SizeOf<MONITORINFO>() };
+        return GetMonitorInfo(MonitorFromWindow(hwnd, 2), ref info) ? info.Work : null;
+    }
+
     public static void SetExStyle(IntPtr hwnd, int add, int remove)
     {
         long style = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
