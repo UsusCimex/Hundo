@@ -24,6 +24,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private int _loadSeq;
     private int _busyCount;
     private string _completionFetchedText = "";
+    /// <summary>
+    /// The hour boxes as the app last filled them or the user applied them: a box that differs holds a draft, which a
+    /// load of the same game keeps.
+    /// </summary>
+    private (string Completion, string Override, string Offset) _hoursFilled = ("", "", "");
     /// <summary>Hidden achievements whose description the user revealed ("appid/apiName"). Kept until the app closes.</summary>
     private readonly HashSet<string> _revealed = new(StringComparer.Ordinal);
     private GuideTips? _guides;
@@ -449,7 +454,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (seq != _loadSeq) return; // another game picked while loading
             loaded = report;
             if (shown is null) SetGame(report.Game);
-            else ShowLoaded(report.Game);
+            else ShowLoaded(report.Game, sameGame: true);
             StatusMessage = report.Warnings.Count > 0
                 ? string.Join(" | ", report.Warnings)
                 : Loc.Plural("status.gameLoaded", report.Game.Achievements.Count);
@@ -617,7 +622,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             var report = await _svc.LoadGameAsync(_game.AppId, _game.Name, forceSchema: force, running: _play.Sessions.IsRunning(_game.AppId),
                 current: _game);
             if (seq != _loadSeq) return;
-            ShowLoaded(report.Game);
+            ShowLoaded(report.Game, sameGame: true);
             StatusMessage = report.Warnings.Count > 0 ? string.Join(" | ", report.Warnings) : Loc.T("status.reloaded");
             AnnounceNew(report.NewlyUnlocked);
             // The tips go with the game object, and a new content language needs its own.
@@ -738,6 +743,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
             CompletionInput = (m.Value / 60).ToString("0.#", CultureInfo.CurrentCulture);
             _completionFetchedText = CompletionInput;
+            _hoursFilled.Completion = CompletionInput;
             Recompute(rebuildRows: false);
             StatusMessage = Loc.T("status.completionFetched");
         });
@@ -763,6 +769,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             minutes = h * 60;
         }
         _svc.SetCompletionMinutes(_game, minutes, "manual");
+        _hoursFilled.Completion = CompletionInput;
         Recompute(rebuildRows: false);
         StatusMessage = Loc.T(minutes is null ? "status.completionReset" : "status.estimatesUpdated");
     }
@@ -776,6 +783,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
         _svc.SetPlaytime(_game, overrideMin, offsetMin ?? 0);
+        _hoursFilled.Override = PlaytimeOverrideInput;
+        _hoursFilled.Offset = PlaytimeOffsetInput;
         Recompute(rebuildRows: false);
         StatusMessage = Loc.T(overrideMin is not null ? "status.playtimeManual"
             : offsetMin is > 0 ? "status.playtimeOffset" : "status.playtimeSteam");
@@ -941,13 +950,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>What a load brought into the open game: its name, times and rows; the selected one stays.</summary>
-    private void ShowLoaded(GameData game)
+    /// <param name="sameGame">The game was shown before the load: the user may be typing in it.</param>
+    private void ShowLoaded(GameData game, bool sameGame = false)
     {
         GameName = game.Name.Length > 0 ? game.Name : $"AppID {game.AppId}";
-        CompletionInput = Hours(game.CompletionMinutes);
-        _completionFetchedText = game.CompletionSource == "manual" ? "" : CompletionInput;
-        PlaytimeOverrideInput = Hours(game.PlaytimeOverrideMinutes);
-        PlaytimeOffsetInput = game.PlaytimeOffsetMinutes > 0 ? Hours(game.PlaytimeOffsetMinutes) : "";
+        var filled = (Completion: Hours(game.CompletionMinutes), Override: Hours(game.PlaytimeOverrideMinutes),
+            Offset: game.PlaytimeOffsetMinutes > 0 ? Hours(game.PlaytimeOffsetMinutes) : "");
+        if (!sameGame || CompletionInput == _hoursFilled.Completion) CompletionInput = filled.Completion;
+        if (!sameGame || PlaytimeOverrideInput == _hoursFilled.Override) PlaytimeOverrideInput = filled.Override;
+        if (!sameGame || PlaytimeOffsetInput == _hoursFilled.Offset) PlaytimeOffsetInput = filled.Offset;
+        _hoursFilled = filled;
+        _completionFetchedText = game.CompletionSource == "manual" ? "" : filled.Completion;
         Recompute(rebuildRows: true);
     }
 
@@ -979,6 +992,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void Recompute(bool rebuildRows)
     {
         if (_game is null) return;
+        // What is typed in an achievement's box goes to it before its card is replaced, or it would be lost.
+        if (rebuildRows)
+            (Keyboard.FocusedElement as System.Windows.Controls.TextBox)?.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
         var p = _selectedPercentile.Value;
         // The time to 100% derived from own progress changes with every unlock, so recalculate it.
         TimeEstimator.EstimateFromGlobalPercent(_game);
