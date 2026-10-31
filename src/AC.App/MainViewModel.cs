@@ -22,6 +22,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _refreshing;
     private IReadOnlySet<uint> _lastRunning = new HashSet<uint>();
     private readonly SessionTracker _sessions;
+    /// <summary>Sessions that ended while something loaded: they are acted on once it is done.</summary>
+    private readonly List<PlaySession> _ended = new();
     /// <summary>The last session seen from its start: its summary stays until dismissed or the next session starts.</summary>
     private PlaySession? _lastSession;
     private int _loadSeq;
@@ -1281,11 +1283,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         try { running = SteamLocal.RunningAppIds(); }
         catch { return; }
 
-        if (!running.SetEquals(_lastRunning))
+        // Every tick, busy or not: starts and ends are stamped when seen, and a pause between looks is taken for sleep.
+        _ended.AddRange(_sessions.Observe(running, DateTimeOffset.Now));
+        if (!running.SetEquals(_lastRunning) || _ended.Count > 0)
         {
-            // While something loads, do not remember it; retry on the next tick.
+            // While something loads, do not act on it; retry on the next tick.
             if (IsBusy) return;
-            var ended = _sessions.Observe(running, DateTimeOffset.Now);
+            var ended = _ended.ToList();
+            _ended.Clear();
             var started = running.Except(_lastRunning).ToList();
             if (ended.Count > 0) _lastSession = ended.FirstOrDefault(s => s.AppId == _game?.AppId) ?? ended[^1];
             else if (started.Count > 0) _lastSession = null;

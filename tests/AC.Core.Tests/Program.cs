@@ -1131,7 +1131,8 @@ static class Tests
     public static void Session_TrackerReportsSessionsSeenFromTheStart()
     {
         var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
-        var tracker = new SessionTracker([7], t0.AddMinutes(-20));
+        // Looked at only now and then here: no pause is taken for sleep.
+        var tracker = new SessionTracker([7], t0.AddMinutes(-20), maxPause: TimeSpan.FromDays(1));
         Assert.Equal(0, tracker.Observe([], t0).Count);
         Assert.Equal(0, tracker.Observe([5], t0.AddMinutes(1)).Count);
         Assert.Equal(0, tracker.Observe([5], t0.AddMinutes(30)).Count);
@@ -1149,7 +1150,7 @@ static class Tests
     {
         // A game, then Spacewar started by an online fix next to it: each has its own session.
         var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
-        var tracker = new SessionTracker([], t0);
+        var tracker = new SessionTracker([], t0, maxPause: TimeSpan.FromDays(1));
         tracker.Observe([5], t0.AddMinutes(1));
         Assert.Equal(0, tracker.Observe([5, 480], t0.AddMinutes(2)).Count);
         Assert.True(tracker.IsRunning(5) && tracker.IsRunning(480), "both run");
@@ -1157,6 +1158,26 @@ static class Tests
         Assert.Equal(new PlaySession(480, t0.AddMinutes(2), t0.AddMinutes(50)), tracker.Observe([5], t0.AddMinutes(50)).Single());
         Assert.Equal<TimeSpan?>(null, tracker.RunningFor(480, t0.AddMinutes(51)));
         Assert.Equal(new PlaySession(5, t0.AddMinutes(1), t0.AddMinutes(60)), tracker.Played(5, t0.AddMinutes(60)).Single());
+    }
+
+    public static void Session_SleepIsNotPlay()
+    {
+        // Looked at every 5 seconds; the computer sleeps from 18:30 to 20:30 with the game open.
+        var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
+        var tracker = new SessionTracker([], t0);
+        for (var t = t0; t <= t0.AddMinutes(30); t = t.AddSeconds(5)) tracker.Observe([5], t);
+        static double Minutes(IEnumerable<PlaySession> s) => Math.Round(s.Sum(p => (p.End - p.Start).TotalMinutes), 1);
+        Assert.Equal(30.0, Minutes(tracker.Played(5, t0.AddMinutes(150))));
+
+        // Woken up: the pause is left out, and the game counts as just started for the auto marks.
+        Assert.Equal(0, tracker.Observe([5], t0.AddMinutes(150)).Count);
+        Assert.Equal<TimeSpan?>(TimeSpan.Zero, tracker.RunningFor(5, t0.AddMinutes(150)));
+        for (var t = t0.AddMinutes(150); t <= t0.AddMinutes(160); t = t.AddSeconds(5)) tracker.Observe([5], t);
+        Assert.Equal(40.0, Minutes(tracker.Played(5, t0.AddMinutes(160))));
+
+        // The session itself goes on through the pause: it ends when the game closes.
+        Assert.Equal(new PlaySession(5, t0, t0.AddMinutes(161)), tracker.Observe([], t0.AddMinutes(161)).Single());
+        Assert.Equal(41.0, Minutes(tracker.Played(5, t0.AddMinutes(170))));
     }
 
     public static void Progress_PlayedSinceTheLastUnlock()
