@@ -72,11 +72,14 @@ public partial class MainWindow : Window
     private void OnOpenSettings(object sender, RoutedEventArgs e)
     {
         var dlg = new SettingsWindow(_vm.Service) { Owner = this };
-        if (dlg.ShowDialog() != true) return;
+        // Off while it is open: a shortcut pressed in a hotkey box would toggle the overlay instead of getting there.
+        _hotkeys?.UnregisterAll();
+        bool saved = dlg.ShowDialog() == true;
+        RegisterHotkeys();
+        if (!saved) return;
         Loc.SetLanguage(_vm.Service.Settings.UiLanguage);
         ThemeManager.Apply(_vm.Service.Settings.Theme);
         _vm.SettingsChanged();
-        RegisterHotkeys();
         _overlay?.ApplySettings();
         _vm.StatusMessage = _hotkeyProblem ?? Loc.T("status.settingsSaved");
     }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -100,6 +101,22 @@ internal sealed class HotkeyManager : IDisposable
         foreach (var id in _actions.Keys) Native.UnregisterHotKey(_hwnd, id);
         _actions.Clear();
         _nextId = 0xA000;
+    }
+
+    /// <summary>A key press as a shortcut TryParse reads; null while only modifiers are down, or for a key it does not take.</summary>
+    public static string? Format(ModifierKeys modifiers, Key key)
+    {
+        if (key is Key.None or Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift
+            or Key.LWin or Key.RWin)
+            return null;
+        var parts = new List<string>();
+        if (modifiers.HasFlag(ModifierKeys.Control)) parts.Add("Ctrl");
+        if (modifiers.HasFlag(ModifierKeys.Alt)) parts.Add("Alt");
+        if (modifiers.HasFlag(ModifierKeys.Shift)) parts.Add("Shift");
+        if (modifiers.HasFlag(ModifierKeys.Windows)) parts.Add("Win");
+        parts.Add(key is >= Key.D0 and <= Key.D9 ? ((int)(key - Key.D0)).ToString(CultureInfo.InvariantCulture) : key.ToString());
+        var gesture = string.Join("+", parts);
+        return TryParse(gesture, out _, out _) ? gesture : null;
     }
 
     public static bool TryParse(string gesture, out uint modifiers, out uint vk)

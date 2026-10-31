@@ -103,11 +103,11 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel>
                                 <TextBlock Text="{local:Tr settings.toggleKey}" Style="{StaticResource Caption}" Margin="0,0,0,2" />
-                                <TextBox x:Name="ToggleHotkeyBox" />
+                                <TextBox x:Name="ToggleHotkeyBox" IsReadOnly="True" PreviewKeyDown="OnHotkeyKeyDown" />
                             </StackPanel>
                             <StackPanel Grid.Column="2">
                                 <TextBlock Text="{local:Tr settings.interactKey}" Style="{StaticResource Caption}" Margin="0,0,0,2" />
-                                <TextBox x:Name="InteractHotkeyBox" />
+                                <TextBox x:Name="InteractHotkeyBox" IsReadOnly="True" PreviewKeyDown="OnHotkeyKeyDown" />
                             </StackPanel>
                         </Grid>
                         <TextBlock Text="{local:Tr settings.opacity}" Style="{StaticResource Caption}" Margin="0,10,0,2" />

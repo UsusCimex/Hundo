@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using AC.Core;
 using AC.Infrastructure;
 
@@ -66,6 +68,24 @@ public partial class SettingsWindow : Window
         }
         SteamIdBox.Text = u.Value.SteamId.ToString(CultureInfo.InvariantCulture);
         MessageBox.Show(this, Loc.T("dialog.accountFound", u.Value.PersonaName), Title);
+    }
+
+    /// <summary>A hotkey box takes the pressed shortcut, not typed text.</summary>
+    private void OnHotkeyKeyDown(object sender, KeyEventArgs e)
+    {
+        var key = e.Key switch
+        {
+            Key.System => e.SystemKey,
+            Key.ImeProcessed => e.ImeProcessedKey,
+            Key.DeadCharProcessed => e.DeadCharProcessedKey,
+            _ => e.Key,
+        };
+        var mods = Keyboard.Modifiers;
+        // Tab and Shift+Tab still move between the boxes, Enter and Escape save and close.
+        if (key == Key.Tab && (mods & ~ModifierKeys.Shift) == 0) return;
+        if (mods == ModifierKeys.None && key is Key.Enter or Key.Escape) return;
+        e.Handled = true;
+        if (HotkeyManager.Format(mods, key) is { } gesture) ((TextBox)sender).Text = gesture;
     }
 
     private void OnSave(object sender, RoutedEventArgs e)

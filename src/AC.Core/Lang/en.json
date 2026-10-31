@@ -256,7 +256,7 @@
   "settings.interactKey": "Click mode",
   "settings.opacity": "Background opacity",
   "settings.nearest": "How many \"up next\" to show",
-  "settings.overlayHint": "Shortcuts like Ctrl+Alt+H. The overlay shows over windowed and borderless games, not over exclusive fullscreen.",
+  "settings.overlayHint": "Click a box and press the shortcut. The overlay shows over windowed and borderless games, not over exclusive fullscreen.",
   "settings.dataTitle": "Data",
   "settings.openData": "Open folder",
   "settings.dataPortable": "Portable mode: data is kept in the data folder next to the app.",
