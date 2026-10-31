@@ -261,6 +261,8 @@
   "settings.dataHint": "Games, settings, image cache and error log (app.log). To keep data next to the app, create a data folder beside it; another folder can be set with the {0} environment variable.",
   "settings.backgroundTitle": "In the background",
   "settings.closeToTray": "Keep running in the notification area when the window is closed",
+  "settings.startWithWindows": "Start with Windows, in the notification area",
+  "dialog.autostartFailed": "Could not change the start with Windows: {0}",
   "settings.backgroundHint": "The countdown, auto marks and the session summary work only when the app runs before the game starts.",
   "tray.open": "Open Hundo",
   "tray.quit": "Quit",

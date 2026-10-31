@@ -30,6 +30,7 @@ public partial class SettingsWindow : Window
         HideSpoilersBox.IsChecked = s.HideSpoilers;
         CheckUpdatesBox.IsChecked = s.CheckUpdates;
         CloseToTrayBox.IsChecked = s.CloseToTray;
+        StartWithWindowsBox.IsChecked = Autostart.IsOn;
         ToggleHotkeyBox.Text = s.OverlayToggleHotkey;
         InteractHotkeyBox.Text = s.OverlayInteractHotkey;
         OverlayAutoBox.IsChecked = s.OverlayAuto;
@@ -117,6 +118,20 @@ public partial class SettingsWindow : Window
         {
             MessageBox.Show(this, Loc.T("dialog.sameHotkey"), Title);
             return;
+        }
+
+        bool autostart = StartWithWindowsBox.IsChecked == true;
+        if (autostart != Autostart.IsOn)
+        {
+            try
+            {
+                Autostart.Set(autostart);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or System.IO.IOException)
+            {
+                MessageBox.Show(this, Loc.T("dialog.autostartFailed", ex.Message), Title);
+                return;
+            }
         }
 
         _svc.Settings.ApiKey = ApiKeyBox.Password;

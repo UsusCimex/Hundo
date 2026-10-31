@@ -125,6 +125,7 @@
                     <StackPanel>
                         <TextBlock Text="{local:Tr settings.backgroundTitle}" Style="{StaticResource Subtitle}" Margin="0,0,0,10" />
                         <CheckBox x:Name="CloseToTrayBox" Content="{local:Tr settings.closeToTray}" />
+                        <CheckBox x:Name="StartWithWindowsBox" Content="{local:Tr settings.startWithWindows}" Margin="0,8,0,0" />
                         <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
                                    Text="{local:Tr settings.backgroundHint}" />
                     </StackPanel>
