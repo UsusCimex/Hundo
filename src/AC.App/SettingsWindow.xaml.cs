@@ -13,6 +13,7 @@ public partial class SettingsWindow : Window
     public SettingsWindow(GameService svc)
     {
         InitializeComponent();
+        WindowFit.ToWorkArea(this);
         _svc = svc;
         var s = svc.Settings;
         ApiKeyBox.Password = svc.ApiKey;

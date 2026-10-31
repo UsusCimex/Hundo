@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        WindowFit.ToWorkArea(this);
         _vm = new MainViewModel(GameService.CreateDefault());
         DataContext = _vm;
         _vm.Toast += text => _overlay?.ShowToast(text);
