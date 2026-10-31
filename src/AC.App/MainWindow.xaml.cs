@@ -229,7 +229,8 @@ public partial class MainWindow : Window
     {
         KeepSaving(KeepTyped);
         KeepSaving(() => _overlay?.SavePosition());
-        if (!_quitting && _tray is not null)
+        // Started in the tray, the icon is there whatever the setting: closing follows the setting all the same.
+        if (!_quitting && _tray is not null && _vm.Service.Settings.CloseToTray)
         {
             // Into the notification area: the app keeps watching for the game, the hotkeys and the overlay work on.
             e.Cancel = true;
