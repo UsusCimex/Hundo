@@ -1430,9 +1430,11 @@ static class Tests
         static double Minutes(IEnumerable<PlaySession> s) => Math.Round(s.Sum(p => (p.End - p.Start).TotalMinutes), 1);
         Assert.Equal(30.0, Minutes(tracker.Played(5, t0.AddMinutes(150))));
 
-        // Woken up: the pause is left out, and the game counts as just started for the auto marks.
+        // Woken up: the pause is left out, and the game counts as just started for the auto marks, though it is
+        // still the game seen running all along.
         Assert.Equal(0, tracker.Observe([5], t0.AddMinutes(150)).Count);
         Assert.Equal<TimeSpan?>(TimeSpan.Zero, tracker.RunningFor(5, t0.AddMinutes(150)));
+        Assert.Equal<TimeSpan?>(TimeSpan.FromMinutes(150), tracker.SeenFor(5, t0.AddMinutes(150)));
         for (var t = t0.AddMinutes(150); t <= t0.AddMinutes(160); t = t.AddSeconds(5)) tracker.Observe([5], t);
         Assert.Equal(40.0, Minutes(tracker.Played(5, t0.AddMinutes(160))));
 

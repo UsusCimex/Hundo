@@ -10,8 +10,8 @@ public sealed record PlaySession(uint AppId, DateTimeOffset Start, DateTimeOffse
 public sealed class SessionTracker
 {
     // Per running game: its start, unknown for one already running when the app started (its session is not
-    // reported), and since when it is known to run.
-    private readonly Dictionary<uint, (DateTimeOffset? Start, DateTimeOffset Since)> _running = new();
+    // reported), since when it is known to run, and since when it is seen running, pauses included.
+    private readonly Dictionary<uint, (DateTimeOffset? Start, DateTimeOffset Since, DateTimeOffset Seen)> _running = new();
     private readonly List<PlaySession> _played = new();
     private readonly TimeSpan _maxPause;
     private DateTimeOffset _lastLook;
@@ -19,7 +19,7 @@ public sealed class SessionTracker
     /// <param name="maxPause">A longer pause between looks is not play: the computer was asleep.</param>
     public SessionTracker(IEnumerable<uint> runningAtStart, DateTimeOffset startedAt, TimeSpan? maxPause = null)
     {
-        foreach (var app in runningAtStart.Where(a => a != 0)) _running[app] = (null, startedAt);
+        foreach (var app in runningAtStart.Where(a => a != 0)) _running[app] = (null, startedAt, startedAt);
         _maxPause = maxPause ?? TimeSpan.FromMinutes(1);
         _lastLook = startedAt;
     }
@@ -31,20 +31,20 @@ public sealed class SessionTracker
         var playedUntil = now - _lastLook > _maxPause ? _lastLook : now;
         _lastLook = now;
         var ended = new List<PlaySession>();
-        foreach (var (app, (start, since)) in _running.ToList())
+        foreach (var (app, (start, since, seen)) in _running.ToList())
         {
             bool stopped = !running.Contains(app);
             if (!stopped && playedUntil == now) continue;
             if (playedUntil > since) _played.Add(new PlaySession(app, since, playedUntil));
             if (!stopped)
             {
-                _running[app] = (start, now);
+                _running[app] = (start, now, seen);
                 continue;
             }
             if (start is { } s) ended.Add(new PlaySession(app, s, now));
             _running.Remove(app);
         }
-        foreach (var app in running.Where(a => a != 0 && !_running.ContainsKey(a))) _running[app] = (now, now);
+        foreach (var app in running.Where(a => a != 0 && !_running.ContainsKey(a))) _running[app] = (now, now, now);
         return ended;
     }
 
@@ -52,6 +52,9 @@ public sealed class SessionTracker
 
     /// <summary>How long the game has been seen running since a pause; null - it is not running.</summary>
     public TimeSpan? RunningFor(uint appId, DateTimeOffset now) => _running.TryGetValue(appId, out var r) ? now - r.Since : null;
+
+    /// <summary>How long the game has been seen running, pauses included; null - it is not running.</summary>
+    public TimeSpan? SeenFor(uint appId, DateTimeOffset now) => _running.TryGetValue(appId, out var r) ? now - r.Seen : null;
 
     /// <summary>
     /// The play of a game seen since the app started, the running session included: up to now, or up to the last

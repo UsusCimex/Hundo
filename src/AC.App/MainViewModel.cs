@@ -1300,8 +1300,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void UpdatePlaying(IReadOnlySet<uint> running)
     {
+        // Seen, not since a pause: after the computer sleeps the game is still the one being played.
         bool playing = _game is { } game && running.Contains(game.AppId) &&
-                       _play.Sessions.RunningFor(game.AppId, DateTimeOffset.Now) >= PlayingAfterRunning;
+                       _play.Sessions.SeenFor(game.AppId, DateTimeOffset.Now) >= PlayingAfterRunning;
         if (playing == Playing) return;
         Playing = playing;
         PlayingChanged?.Invoke(playing);
