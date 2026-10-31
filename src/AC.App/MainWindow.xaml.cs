@@ -12,6 +12,8 @@ public partial class MainWindow : Window
     private readonly MainViewModel _vm;
     private HotkeyManager? _hotkeys;
     private OverlayWindow? _overlay;
+    /// <summary>The hotkeys that could not be registered: taken by another program, or not a valid combination.</summary>
+    private string? _hotkeyProblem;
 
     public MainWindow()
     {
@@ -19,7 +21,12 @@ public partial class MainWindow : Window
         _vm = new MainViewModel(GameService.CreateDefault());
         DataContext = _vm;
         _vm.Toast += text => _overlay?.ShowToast(text);
-        Loaded += async (_, _) => await _vm.StartAsync();
+        Loaded += async (_, _) =>
+        {
+            await _vm.StartAsync();
+            // The statuses of the start would hide it.
+            if (_hotkeyProblem is { } problem) _vm.StatusMessage = problem;
+        };
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -37,8 +44,8 @@ public partial class MainWindow : Window
         var problems = new List<string>();
         if (!_hotkeys.Register(s.OverlayToggleHotkey, ToggleOverlay)) problems.Add(s.OverlayToggleHotkey);
         if (!_hotkeys.Register(s.OverlayInteractHotkey, () => EnsureOverlay().ToggleInteractive())) problems.Add(s.OverlayInteractHotkey);
-        if (problems.Count > 0)
-            _vm.StatusMessage = Loc.T("status.hotkeysFailed", string.Join(", ", problems));
+        _hotkeyProblem = problems.Count > 0 ? Loc.T("status.hotkeysFailed", string.Join(", ", problems)) : null;
+        if (_hotkeyProblem is not null) _vm.StatusMessage = _hotkeyProblem;
     }
 
     private OverlayWindow EnsureOverlay()
@@ -69,7 +76,7 @@ public partial class MainWindow : Window
         _vm.SettingsChanged();
         RegisterHotkeys();
         _overlay?.ApplySettings();
-        _vm.StatusMessage = Loc.T("status.settingsSaved");
+        _vm.StatusMessage = _hotkeyProblem ?? Loc.T("status.settingsSaved");
     }
 
     /// <summary>A guide picture opens larger, with the tip's other pictures to page through.</summary>
