@@ -227,14 +227,14 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        KeepTyped();
-        _overlay?.SavePosition();
+        KeepSaving(KeepTyped);
+        KeepSaving(() => _overlay?.SavePosition());
         if (!_quitting && _tray is not null)
         {
             // Into the notification area: the app keeps watching for the game, the hotkeys and the overlay work on.
             e.Cancel = true;
             Hide();
-            HintTrayOnce();
+            KeepSaving(HintTrayOnce);
             base.OnClosing(e);
             return;
         }
@@ -242,6 +242,13 @@ public partial class MainWindow : Window
         _hotkeys?.Dispose();
         _hotkeys = null;
         base.OnClosing(e);
+    }
+
+    /// <summary>A file held by an antivirus or a cloud folder fails a save: closing the window goes on.</summary>
+    private static void KeepSaving(Action save)
+    {
+        try { save(); }
+        catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException) { AppLog.Error("Saving on close", e); }
     }
 
     protected override void OnClosed(EventArgs e)
