@@ -463,6 +463,8 @@
   "error.rateLimited": "Steam is rate limiting requests (429), try again later",
   "error.http": "Steam answered {0}",
   "error.notJson": "Steam returned an unexpected response",
+  "error.hostResting": "{0} did not answer a moment ago, it is skipped for a few minutes",
+  "error.hostTimeout": "{0} did not answer in {1} s",
   "error.emptyTags": "The tags file is empty",
   "error.tagsOtherGame": "The tags file is for another game: {0}"
 }

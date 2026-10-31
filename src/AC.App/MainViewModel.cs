@@ -526,12 +526,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         var seq = ++_loadSeq;
         LoadReport? loaded = null;
+        // A game opened before shows at once from its file: Steam's answers fill it in when they come, and what is
+        // done to it meanwhile stays.
+        var shown = _svc.Cached(appId);
+        if (shown is not null)
+        {
+            shown.CountManualMarks = ManualUnlocks;
+            SetGame(shown);
+        }
         await Busy(Loc.T("status.loadingGame", name ?? appId.ToString()), async () =>
         {
-            var report = await _svc.LoadGameAsync(appId, name, running: _sessions.IsRunning(appId));
+            var report = await _svc.LoadGameAsync(appId, name, running: _sessions.IsRunning(appId), current: shown);
             if (seq != _loadSeq) return; // another game picked while loading
             loaded = report;
-            SetGame(report.Game);
+            if (shown is null) SetGame(report.Game);
+            else ShowLoaded(report.Game);
             StatusMessage = report.Warnings.Count > 0
                 ? string.Join(" | ", report.Warnings)
                 : Loc.Plural("status.gameLoaded", report.Game.Achievements.Count);
@@ -699,7 +708,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             var report = await _svc.LoadGameAsync(_game.AppId, _game.Name, forceSchema: force, running: _sessions.IsRunning(_game.AppId),
                 current: _game);
             if (seq != _loadSeq) return;
-            SetGame(report.Game);
+            ShowLoaded(report.Game);
             StatusMessage = report.Warnings.Count > 0 ? string.Join(" | ", report.Warnings) : Loc.T("status.reloaded");
             AnnounceNew(report.NewlyUnlocked);
             // The tips go with the game object, and a new content language needs its own.
@@ -1011,20 +1020,26 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _svc.SaveSettings();
         }
         _guides = null;
-        GameName = game.Name.Length > 0 ? game.Name : $"AppID {game.AppId}";
         SelectedRow = null;
         OnPropertyChanged(nameof(HasGame));
         OnPropertyChanged(nameof(HeaderImageUrl));
         OnPropertyChanged(nameof(HeroImageUrl));
+        RestartWatcher();
+        ShowLoaded(game);
+        ShowOpenInLibrary();
+        OnPropertyChanged(nameof(Game));
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    /// <summary>What a load brought into the open game: its name, times and rows; the selected one stays.</summary>
+    private void ShowLoaded(GameData game)
+    {
+        GameName = game.Name.Length > 0 ? game.Name : $"AppID {game.AppId}";
         CompletionInput = Hours(game.CompletionMinutes);
         _completionFetchedText = game.CompletionSource == "manual" ? "" : CompletionInput;
         PlaytimeOverrideInput = Hours(game.PlaytimeOverrideMinutes);
         PlaytimeOffsetInput = game.PlaytimeOffsetMinutes > 0 ? Hours(game.PlaytimeOffsetMinutes) : "";
-        RestartWatcher();
         Recompute(rebuildRows: true);
-        ShowOpenInLibrary();
-        OnPropertyChanged(nameof(Game));
-        CommandManager.InvalidateRequerySuggested();
     }
 
     public void SettingsChanged()

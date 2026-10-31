@@ -475,6 +475,8 @@
   "error.rateLimited": "Steam ограничил частоту запросов (429), попробуй позже",
   "error.http": "Steam ответил {0}",
   "error.notJson": "Steam вернул непонятный ответ",
+  "error.hostResting": "{0} недавно не ответил, несколько минут его не спрашиваем",
+  "error.hostTimeout": "{0} не ответил за {1} с",
   "error.emptyTags": "Пустой файл разметки",
   "error.tagsOtherGame": "Файл разметки от другой игры: {0}"
 }

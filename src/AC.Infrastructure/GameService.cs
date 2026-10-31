@@ -52,7 +52,7 @@ public sealed class GameService
 
     public static GameService CreateDefault()
     {
-        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+        var http = new HttpClient(new HangGuard()) { Timeout = TimeSpan.FromSeconds(20) };
         return new GameService(new JsonStore(), new SteamWebApi(http), new BridgeClient(), new SteamHunters(http));
     }
 

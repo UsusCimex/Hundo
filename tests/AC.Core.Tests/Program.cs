@@ -959,6 +959,23 @@ static class Tests
         });
     }
 
+    public static void HangGuard_SkipsAHostThatDidNotAnswer()
+    {
+        var hanging = new HangingHttp();
+        using var http = new HttpClient(new AC.Infrastructure.HangGuard(hanging, TimeSpan.FromMilliseconds(100), TimeSpan.FromMinutes(1)));
+        bool Fails<T>(string url) where T : Exception
+        {
+            try { http.GetAsync(url).GetAwaiter().GetResult(); return false; }
+            catch (T) { return true; }
+        }
+        Assert.True(Fails<TaskCanceledException>("https://slow.example/schema"), "the first request waits and times out");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Assert.True(Fails<HttpRequestException>("https://slow.example/status"), "the next one is refused");
+        Assert.True(sw.ElapsedMilliseconds < 50, $"refused at once, took {sw.ElapsedMilliseconds} ms");
+        Assert.Equal(1, hanging.Asked);
+        Assert.True(http.GetAsync("https://fast.example/").GetAwaiter().GetResult().IsSuccessStatusCode, "other hosts are asked");
+    }
+
     const string HuntersPercentages = """
         [{"apiName":"ch1","steamPercentage":90},{"apiName":"ch5","steamPercentage":30},{"apiName":"miss","steamPercentage":20},
          {"apiName":"grind","steamPercentage":2},{"apiName":"misc","steamPercentage":50}]
@@ -1922,6 +1939,20 @@ static class Tests
 }
 
 /// <summary>Answers every request by its URL and remembers what was asked.</summary>
+/// <summary>Hangs on slow.example until the request is cancelled; answers OK elsewhere.</summary>
+sealed class HangingHttp : HttpMessageHandler
+{
+    public int Asked;
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        if (request.RequestUri!.Host != "slow.example") return new HttpResponseMessage(HttpStatusCode.OK);
+        Interlocked.Increment(ref Asked);
+        await Task.Delay(Timeout.Infinite, ct);
+        return new HttpResponseMessage(HttpStatusCode.OK);
+    }
+}
+
 sealed class FakeHttp(Func<string, (HttpStatusCode Status, string Body)> answer) : HttpMessageHandler
 {
     public List<string> Urls { get; } = new();
