@@ -447,6 +447,34 @@ static class Tests
         Assert.Equal(120.0, g2.ManualEstimates["grind"]);
     }
 
+    public static void TagPack_SkipsBadInput()
+    {
+        try
+        {
+            new TagPack { AppId = 2, Game = "Other" }.ApplyTo(SampleGame());
+            Assert.True(false, "a file of another game is refused");
+        }
+        catch (FormatException e) { Assert.True(e.Message.Contains("Other"), e.Message); }
+
+        var json = """
+            { "AppId": 0, "Game": null, "CompletionMinutes": -1, "Items": [
+              null,
+              { "ApiName": null, "Note": "x" },
+              { "ApiName": "ch1", "EstimateMinutes": 0, "Kind": 99 },
+              { "ApiName": "ch5", "EstimateMinutes": 1e9 },
+              { "ApiName": "grind", "EstimateMinutes": 90, "Kind": "Missable" } ] }
+            """;
+        var g = SampleGame();
+        g.CompletionMinutes = null;
+        Assert.Equal(3, TagPack.FromJson(json).ApplyTo(g));
+        Assert.True(!g.ManualEstimates.ContainsKey("ch1") && !g.ManualEstimates.ContainsKey("ch5"), "a zero or huge estimate is skipped");
+        Assert.Equal(90.0, g.ManualEstimates["grind"]);
+        Assert.Equal(AchievementKind.Missable, g.Tags["grind"].Kind);
+        Assert.True(g.Tags["ch1"].Source != KindSource.Manual, "an unknown kind is skipped");
+        Assert.Equal(null, g.CompletionMinutes);
+        Assert.Equal(0, TagPack.FromJson("""{ "Items": null }""").ApplyTo(g));
+    }
+
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public static void MergeSchema_KeepsKnownData()
     {

@@ -38,18 +38,23 @@ public sealed class TagPack
         return pack;
     }
 
-    /// <summary>Applies the tags. Returns the number of applied items (unknown api names are skipped).</summary>
+    /// <summary>
+    /// Applies the tags. Returns the number of applied items (unknown api names are skipped).
+    /// A file of another game is refused: generic api names (ACH_1) would match.
+    /// </summary>
     public int ApplyTo(GameData game)
     {
+        if (AppId != 0 && AppId != game.AppId)
+            throw new FormatException(Loc.T("error.tagsOtherGame", string.IsNullOrWhiteSpace(Game) ? AppId.ToString() : Game));
         var known = game.Achievements.Select(a => a.ApiName).ToHashSet(StringComparer.Ordinal);
         int applied = 0;
         foreach (var item in Items)
         {
             if (!known.Contains(item.ApiName)) continue;
             var tag = game.TagOf(item.ApiName);
-            if (item.Kind.HasValue)
+            if (item.Kind is { } kind && Enum.IsDefined(kind))
             {
-                tag.Kind = item.Kind.Value;
+                tag.Kind = kind;
                 tag.Source = KindSource.Manual;
             }
             if (item.Group is not null)
@@ -57,7 +62,7 @@ public sealed class TagPack
                 tag.Group = item.Group;
                 tag.GroupSource = KindSource.Manual;
             }
-            if (item.EstimateMinutes.HasValue) game.ManualEstimates[item.ApiName] = item.EstimateMinutes.Value;
+            if (item.EstimateMinutes is { } est && TimeEstimator.IsValidMinutes(est)) game.ManualEstimates[item.ApiName] = est;
             if (item.Note?.Trim() is { Length: > 0 } note)
             {
                 // An own note stays: the imported one goes after it.
@@ -68,14 +73,21 @@ public sealed class TagPack
             }
             applied++;
         }
-        if (CompletionMinutes is > 0 && game.CompletionMinutes is null) game.CompletionMinutes = CompletionMinutes;
+        if (CompletionMinutes is { } total && TimeEstimator.IsValidMinutes(total) && game.CompletionMinutes is null)
+            game.CompletionMinutes = total;
         return applied;
     }
 
     public string ToJson() => JsonSerializer.Serialize(this, JsonOptions.Pretty);
 
-    public static TagPack FromJson(string json) =>
-        JsonSerializer.Deserialize<TagPack>(json, JsonOptions.Pretty) ?? throw new FormatException(Loc.T("error.emptyTags"));
+    public static TagPack FromJson(string json)
+    {
+        var pack = JsonSerializer.Deserialize<TagPack>(json, JsonOptions.Pretty) ?? throw new FormatException(Loc.T("error.emptyTags"));
+        // A file made by hand may have null where a list, an item or a name is expected.
+        pack.Items = pack.Items?.Where(i => i is { ApiName: not null }).ToList() ?? new();
+        pack.Game ??= "";
+        return pack;
+    }
 }
 
 public sealed class TagPackItem

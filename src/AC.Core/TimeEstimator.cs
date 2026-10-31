@@ -19,6 +19,11 @@ public static class TimeEstimator
     public const double P75Factor = 1.3;
     public const double P90Factor = 1.7;
 
+    /// <summary>The longest time typed in or loaded from a file (19 years): more is a typo or a broken file.</summary>
+    public const double MaxMinutes = 10_000_000;
+
+    public static bool IsValidMinutes(double minutes) => minutes is > 0 and <= MaxMinutes;
+
     public static void EstimateFromGlobalPercent(GameData game)
     {
         foreach (var key in game.Estimates.Where(kv => kv.Value.Source == SourceName).Select(kv => kv.Key).ToList())

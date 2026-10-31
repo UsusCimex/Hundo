@@ -976,7 +976,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Recompute(rebuildRows: true);
             StatusMessage = Loc.Plural("status.tagsApplied", n);
         }
-        catch (Exception e) when (e is FormatException or System.Text.Json.JsonException or IOException or UnauthorizedAccessException)
+        catch (FormatException e)
+        {
+            StatusMessage = e.Message;
+        }
+        catch (Exception e) when (e is System.Text.Json.JsonException or IOException or UnauthorizedAccessException)
         {
             StatusMessage = Loc.T("status.tagsBad", e.Message);
         }
