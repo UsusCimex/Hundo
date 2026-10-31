@@ -34,6 +34,9 @@ using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 public static class Shot {
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+    [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+    [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
     [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
     [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int size);
@@ -46,10 +49,11 @@ public static class Shot {
     // A window started from a hidden console, or minimized meanwhile, is restored without taking the focus.
     public static void TopMost(IntPtr h) { if (IsIconic(h)) ShowWindow(h, 4); SetWindowPos(h, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); }
     public static void Move(IntPtr h, int x, int y) { SetWindowPos(h, new IntPtr(-1), x, y, 0, 0, 0x0001 | 0x0010); }
-    public static void Grab(IntPtr h, string path) { GrabRect(Bounds(h), path); }
+    public static void Grab(IntPtr h, string path) { uint pid; GetWindowThreadProcessId(h, out pid); GrabRect(Bounds(h), path, pid); }
     // From the screen, not PrintWindow: that one misses images loaded after the first paint.
     // CAPTUREBLT so the overlay (a layered window) gets in.
-    public static void GrabRect(RECT v, string path) {
+    public static void GrabRect(RECT v, string path, uint pid) {
+        EnsureUncovered(v, pid);
         using (var bmp = new Bitmap(v.R - v.L, v.B - v.T, PixelFormat.Format32bppArgb)) {
             using (var g = Graphics.FromImage(bmp)) {
                 IntPtr dst = g.GetHdc(); IntPtr src = GetDC(IntPtr.Zero);
@@ -58,6 +62,18 @@ public static class Shot {
             }
             bmp.Save(path, ImageFormat.Png);
         }
+    }
+    // A window of another app over the rect would get into the picture, private content and all.
+    static void EnsureUncovered(RECT v, uint pid) {
+        uint own = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+        for (int i = 0; i < 8; i++)
+            for (int j = 0; j < 8; j++) {
+                var p = new POINT { X = v.L + 4 + (v.R - v.L - 8) * i / 7, Y = v.T + 4 + (v.B - v.T - 8) * j / 7 };
+                uint at; GetWindowThreadProcessId(WindowFromPoint(p), out at);
+                if (at != pid && at != own)
+                    throw new InvalidOperationException(string.Format("{0} covers the app at {1},{2}: the shot is not taken",
+                        System.Diagnostics.Process.GetProcessById((int)at).ProcessName, p.X, p.Y));
+            }
     }
     // The same window shot over black and over white gives its own colors and transparency.
     public static void Matte(string onBlack, string onWhite, string path) {
@@ -176,7 +192,7 @@ try {
         [Shot]::TopMost($ovh)
         Start-Sleep -Milliseconds 600
         $shots[$color] = Join-Path $tmp "overlay-$color.png"
-        [Shot]::GrabRect($ob, $shots[$color])
+        [Shot]::GrabRect($ob, $shots[$color], [uint32]$p.Id)
     }
     $backdrop.Close()
     [Shot]::Matte($shots["Black"], $shots["White"], (Join-Path $OutDir "overlay-alone-$suffix.png"))
