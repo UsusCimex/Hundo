@@ -19,18 +19,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private StatsFileWatcher? _watcher;
     private DateTime _lastPoll = DateTime.MinValue;
     private bool _refreshing;
-    private IReadOnlySet<uint> _lastRunning = new HashSet<uint>();
-    /// <summary>Started over by the first look at the running games, when the window opens.</summary>
-    private SessionTracker _sessions = new([], DateTimeOffset.Now);
-    private bool _scanning;
-    private bool _scanFailed;
+    private readonly PlayWatch _play = new();
     private string? _tickError;
-    /// <summary>Sessions that ended while something loaded: they are acted on once it is done.</summary>
-    private readonly List<PlaySession> _ended = new();
-    /// <summary>
-    /// The last session of each game seen from its start: its summary stays until dismissed or the game starts again.
-    /// </summary>
-    private readonly Dictionary<uint, PlaySession> _lastSessions = new();
     private int _loadSeq;
     private int _busyCount;
     private string _completionFetchedText = "";
@@ -72,7 +62,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OverlayHideCommand = new RelayCommand(p => { if (p is AchievementRowViewModel r) r.InOverlay = false; });
         DownloadUpdateCommand = new RelayCommand(() => OpenUrl(_update?.DownloadUrl), () => _update != null);
         UpdateNotesCommand = new RelayCommand(() => OpenUrl(_update?.PageUrl), () => _update != null);
-        CloseSessionCommand = new RelayCommand(() => { if (_game is { } g) _lastSessions.Remove(g.AppId); UpdateSession(); });
+        CloseSessionCommand = new RelayCommand(() => { if (_game is { } g) _play.Dismiss(g.AppId); UpdateSession(); });
         CloseTimeCommand = new RelayCommand(() => IsTimeOpen = false);
         OpenGuideTipCommand = new RelayCommand(p => OpenUrl(p is AchievementRowViewModel r ? GuideTipFor(r.ApiName)?.Url : null));
         TranslateTipCommand = new AsyncCommand(p => TranslateTipAsync(p as AchievementRowViewModel), OnError);
@@ -194,7 +184,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private double PlayedSinceUnlock(GameData game)
     {
         var now = DateTimeOffset.Now;
-        return Progress.MinutesSinceProgress(game, now, _sessions.Played(game.AppId, now));
+        return Progress.MinutesSinceProgress(game, now, _play.Sessions.Played(game.AppId, now));
     }
 
     public bool HideSpoilers => _svc.Settings.HideSpoilers;
@@ -403,9 +393,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public async Task StartAsync()
     {
-        // The games already running when the app starts: their sessions began earlier and are not reported.
-        var running = await ScanRunningAsync() ?? new HashSet<uint>();
-        _sessions = new SessionTracker(running, DateTimeOffset.Now);
+        var running = await _play.StartAsync();
         _runningTimer.Start();
 
         if (!_svc.HasApiKey)
@@ -418,7 +406,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         var last = _svc.Settings.LastAppId;
-        var start = running.Count == 0 || running.Contains(last) ? last : Followed(running);
+        var start = running.Count == 0 || running.Contains(last) ? last : PlayWatch.Followed(running);
         if (start != 0) await SafeAsync(() => LoadAsync(start, Library.NameOf(start)));
         await SafeAsync(CheckUpdateAsync);
     }
@@ -457,7 +445,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         await Busy(Loc.T("status.loadingGame", name ?? appId.ToString()), async () =>
         {
-            var report = await _svc.LoadGameAsync(appId, name, running: _sessions.IsRunning(appId), current: shown);
+            var report = await _svc.LoadGameAsync(appId, name, running: _play.Sessions.IsRunning(appId), current: shown);
             if (seq != _loadSeq) return; // another game picked while loading
             loaded = report;
             if (shown is null) SetGame(report.Game);
@@ -471,7 +459,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // browsing the library would show the user in every game opened.
         if (seq == _loadSeq && _game is { } opened && opened.AppId == appId &&
             (_svc.Settings.StatusSource == StatusSource.SteamClient || !_svc.HasApiKey) && _svc.Bridge.Exists &&
-            _svc.StatusMayHaveChanged(opened, _sessions.IsRunning(appId)))
+            _svc.StatusMayHaveChanged(opened, _play.Sessions.IsRunning(appId)))
             await SafeAsync(RefreshStateAsync);
 
         // Neither Steam nor Steam Hunters has percentages (a new game): collect player statistics ourselves.
@@ -626,7 +614,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         await Busy(Loc.T("status.reloading"), async () =>
         {
             var seq = ++_loadSeq;
-            var report = await _svc.LoadGameAsync(_game.AppId, _game.Name, forceSchema: force, running: _sessions.IsRunning(_game.AppId),
+            var report = await _svc.LoadGameAsync(_game.AppId, _game.Name, forceSchema: force, running: _play.Sessions.IsRunning(_game.AppId),
                 current: _game);
             if (seq != _loadSeq) return;
             ShowLoaded(report.Game);
@@ -1187,12 +1175,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         if (_game is null) return;
         var now = DateTimeOffset.Now;
-        var played = TimeEstimator.Format(Progress.PlaytimeNow(_game, now, _sessions.Played(_game.AppId, now)));
+        var played = TimeEstimator.Format(Progress.PlaytimeNow(_game, now, _play.Sessions.Played(_game.AppId, now)));
         var steamPlayed = TimeEstimator.Format(_game.PlaytimeMinutes);
         StatPlayed = played;
         StatPlayedSub = _game.PlaytimeOverrideMinutes is not null ? Loc.T("game.playedManual")
             : _game.PlaytimeOffsetMinutes > 0 ? Loc.T("game.playedOf", steamPlayed)
-            : _sessions.IsRunning(_game.AppId) ? Loc.T("game.playedNow")
+            : _play.Sessions.IsRunning(_game.AppId) ? Loc.T("game.playedNow")
             : Loc.T("game.playedSteam");
         var playedNote = _game.PlaytimeOverrideMinutes is not null ? Loc.T("time.playedNoteManual")
             : _game.PlaytimeOffsetMinutes > 0 ? Loc.T("time.playedNoteOf", steamPlayed)
@@ -1269,29 +1257,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private async Task OnRunningTickAsync()
     {
-        if (_scanning || await ScanRunningAsync() is not { } running) return;
+        if (await _play.LookAsync() is not { } running) return;
 
-        // Every tick, busy or not: starts and ends are stamped when seen, and a pause between looks is taken for sleep.
-        _ended.AddRange(_sessions.Observe(running, DateTimeOffset.Now));
-        if (!running.SetEquals(_lastRunning) || _ended.Count > 0)
+        if (_play.HasChanges)
         {
-            // While something loads, do not act on it; retry on the next tick.
+            // While something loads, do not act on them; they wait for the next tick.
             if (IsBusy) return;
-            var ended = _ended.ToList();
-            _ended.Clear();
-            var started = running.Except(_lastRunning).ToList();
-            foreach (var session in ended) _lastSessions[session.AppId] = session;
-            foreach (var app in started) _lastSessions.Remove(app);
+            var changes = _play.TakeChanges();
             UpdateSession();
-            if (_game is { } played && _lastRunning.Contains(played.AppId) && !running.Contains(played.AppId) && _svc.HasApiKey)
+            if (_game is { } played && changes.Stopped.Contains(played.AppId) && _svc.HasApiKey)
             {
-                var session = _lastSessions.GetValueOrDefault(played.AppId);
+                var session = _play.LastSession(played.AppId);
                 _ = SafeAsync(() => AfterSessionAsync(played, session));
             }
-            _lastRunning = running;
-            if (AutoFollow && started.Count > 0 && (_game is null || !running.Contains(_game.AppId)))
+            if (AutoFollow && changes.Started.Count > 0 && (_game is null || !running.Contains(_game.AppId)))
             {
-                var next = Followed(started);
+                var next = PlayWatch.Followed(changes.Started);
                 await SafeAsync(() => LoadAsync(next, Library.NameOf(next)));
                 return;
             }
@@ -1320,46 +1301,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void UpdatePlaying(IReadOnlySet<uint> running)
     {
         bool playing = _game is { } game && running.Contains(game.AppId) &&
-                       _sessions.RunningFor(game.AppId, DateTimeOffset.Now) >= PlayingAfterRunning;
+                       _play.Sessions.RunningFor(game.AppId, DateTimeOffset.Now) >= PlayingAfterRunning;
         if (playing == Playing) return;
         Playing = playing;
         PlayingChanged?.Invoke(playing);
-    }
-
-    /// <summary>
-    /// The running games, looked up off the UI thread: the scan opens every process and, every few minutes, reads the
-    /// app manifests of all libraries. null - it failed (logged once).
-    /// </summary>
-    private async Task<IReadOnlySet<uint>?> ScanRunningAsync()
-    {
-        _scanning = true;
-        try
-        {
-            var running = await Task.Run(SteamLocal.RunningAppIds);
-            _scanFailed = false;
-            return running;
-        }
-        catch (Exception e)
-        {
-            if (!_scanFailed) AppLog.Error("Running games", e);
-            _scanFailed = true;
-            return null;
-        }
-        finally
-        {
-            _scanning = false;
-        }
-    }
-
-    /// <summary>
-    /// Of the games started, the one to open: an installed game before one known only from Steam's registry, such as
-    /// Spacewar started by an online fix next to the game; of installed ones, the one Steam names.
-    /// </summary>
-    private static uint Followed(IReadOnlyCollection<uint> started)
-    {
-        var installed = SteamLocal.InstalledGames();
-        uint named = SteamLocal.NamedAppId();
-        return started.OrderByDescending(a => installed.ContainsKey(a)).ThenByDescending(a => a == named).First();
     }
 
     /// <summary>
@@ -1374,7 +1319,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (!ManualUnlocks || !_svc.Settings.AutoMark || IsBusy || _refreshing) return;
         if (_game is not { } game || _plan is not { } plan) return;
         // Checked again here: the open game may have changed while the status was read.
-        if (_sessions.RunningFor(game.AppId, DateTimeOffset.Now) is not { } running || running < AutoMarkAfterRunning) return;
+        if (_play.Sessions.RunningFor(game.AppId, DateTimeOffset.Now) is not { } running || running < AutoMarkAfterRunning) return;
         if (plan.Due(PlayedSinceUnlock(game)) is not { } name) return;
         // The plan is rebuilt only after the mark reaches Steam: until then it still names the one being marked.
         var state = game.StateOf(name);
@@ -1390,7 +1335,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private async Task AfterSessionAsync(GameData game, PlaySession? session)
     {
         await Task.Delay(TimeSpan.FromMinutes(2));
-        if (_game != game || IsBusy || _sessions.IsRunning(game.AppId)) return;
+        if (_game != game || IsBusy || _play.Sessions.IsRunning(game.AppId)) return;
         try
         {
             await _svc.RefreshPlaytimeAsync(game, session);
@@ -1410,8 +1355,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void UpdateSession()
     {
         var now = DateTimeOffset.Now;
-        var summary = _game is { } game && _lastSessions.TryGetValue(game.AppId, out var session) && (_svc.HasApiKey || _svc.Bridge.Exists)
-            ? SessionSummary.Of(game, session, _selectedPercentile.Value, now, _sessions.Played(game.AppId, now))
+        var summary = _game is { } game && _play.LastSession(game.AppId) is { } session && (_svc.HasApiKey || _svc.Bridge.Exists)
+            ? SessionSummary.Of(game, session, _selectedPercentile.Value, now, _play.Sessions.Played(game.AppId, now))
             : null;
         // A game started and closed at once is not worth a summary.
         if (summary is { Unlocked.Count: 0 } && summary.Duration < TimeSpan.FromMinutes(1)) summary = null;

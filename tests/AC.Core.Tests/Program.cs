@@ -1355,6 +1355,44 @@ static class Tests
         Assert.Equal(new PlaySession(5, t0.AddMinutes(1), t0.AddMinutes(60)), tracker.Played(5, t0.AddMinutes(60)).Single());
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Session_ChangesWaitUntilTaken()
+    {
+        var t0 = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
+        var now = t0;
+        IReadOnlySet<uint> running = new HashSet<uint> { 7 };
+        var watch = new AC.Infrastructure.PlayWatch(() => running, () => now);
+        string Look(uint[] apps, int seconds)
+        {
+            running = apps.ToHashSet();
+            now = t0.AddSeconds(seconds);
+            watch.LookAsync().GetAwaiter().GetResult();
+            if (!watch.HasChanges) return "none";
+            var c = watch.TakeChanges();
+            return string.Join(",", c.Started) + "|" + string.Join(",", c.Stopped);
+        }
+        Assert.Equal("7", string.Join(",", watch.StartAsync().GetAwaiter().GetResult()));
+
+        // Nothing was taken yet: a game running at the start counts as started.
+        Assert.Equal("7|", Look([7], 5));
+        Assert.Equal("none", Look([7], 10));
+
+        // A game started and closed between two takes: no start or stop, but its session is kept.
+        running = new HashSet<uint> { 7, 5 };
+        now = t0.AddSeconds(15);
+        watch.LookAsync().GetAwaiter().GetResult();
+        Assert.Equal("|", Look([7], 20));
+        Assert.Equal(new PlaySession(5, t0.AddSeconds(15), t0.AddSeconds(20)), watch.LastSession(5));
+
+        // The game running at the start stops: its session began earlier and is not reported.
+        Assert.Equal("|7", Look([], 25));
+        Assert.Equal<PlaySession?>(null, watch.LastSession(7));
+
+        // Started again, a game has no last session.
+        Assert.Equal("5|", Look([5], 30));
+        Assert.Equal<PlaySession?>(null, watch.LastSession(5));
+    }
+
     public static void Session_SleepIsNotPlay()
     {
         // Looked at every 5 seconds; the computer sleeps from 18:30 to 20:30 with the game open.
