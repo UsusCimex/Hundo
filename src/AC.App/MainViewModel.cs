@@ -825,7 +825,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         double? minutes = null;
         if (s.Length > 0)
         {
-            if (!double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var h) || h <= 0)
+            if (!double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var h) || !TimeEstimator.IsValidMinutes(h * 60))
             {
                 StatusMessage = Loc.T("status.completionBad");
                 return;
@@ -857,7 +857,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         minutes = null;
         var s = text.Trim().Replace(',', '.');
         if (s.Length == 0) return true;
-        if (!double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var h) || h < 0) return false;
+        if (!double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var h) || (h != 0 && !TimeEstimator.IsValidMinutes(h * 60)))
+            return false;
         minutes = h * 60;
         return true;
     }

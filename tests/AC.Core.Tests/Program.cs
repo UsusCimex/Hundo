@@ -147,6 +147,14 @@ static class Tests
         Assert.Equal(0, g.Estimates.Count);
     }
 
+    public static void Estimator_ValidMinutes()
+    {
+        // JSON cannot hold infinity or NaN: a game holding one is never saved again
+        foreach (var bad in new[] { double.PositiveInfinity, double.NaN, 0, -1, 1e8 })
+            Assert.True(!TimeEstimator.IsValidMinutes(bad), $"{bad} is refused");
+        Assert.True(TimeEstimator.IsValidMinutes(1) && TimeEstimator.IsValidMinutes(TimeEstimator.MaxMinutes));
+    }
+
     public static void ManualEstimate_Wins()
     {
         var g = SampleGame();

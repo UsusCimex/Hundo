@@ -973,7 +973,7 @@
                                                Visibility="{Binding GroupIsAuto, Converter={StaticResource BoolToVis}}" />
 
                                     <TextBlock Text="{local:Tr details.ownEstimate}" Style="{StaticResource Caption}" Margin="0,10,0,2" />
-                                    <TextBox Text="{Binding EstimateInput, UpdateSourceTrigger=LostFocus}" />
+                                    <TextBox Text="{Binding EstimateInput, UpdateSourceTrigger=LostFocus}" AutomationProperties.AutomationId="OwnEstimate" />
 
                                     <TextBlock Text="{local:Tr details.note}" Style="{StaticResource Caption}" Margin="0,10,0,2" />
                                     <TextBox Text="{Binding Note, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" />

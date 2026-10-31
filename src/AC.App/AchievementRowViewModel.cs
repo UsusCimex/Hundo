@@ -311,7 +311,7 @@ public sealed class AchievementRowViewModel : ObservableObject
             var s = value.Trim().Replace(',', '.');
             if (s.Length > 0)
             {
-                if (!double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var h) || h <= 0)
+                if (!double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var h) || !TimeEstimator.IsValidMinutes(h * 60))
                 {
                     _owner.StatusMessage = Loc.T("status.estimateBad", value);
                     return;
