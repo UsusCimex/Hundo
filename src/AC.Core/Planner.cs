@@ -68,15 +68,15 @@ public sealed record Plan(
     }
 
     /// <summary>
-    /// The achievement whose time is up after that play: the nearest one ahead, once the play reaches its time left.
-    /// Of several at the same point the most common goes first; the others share the stretch and come later.
-    /// null - none yet.
+    /// The achievement whose time is up after that play: the nearest one ahead, once the play reaches its time left
+    /// and the least margin (the most common one is at the very start of the scale). Of several at the same point
+    /// the most common goes first; the others share the stretch and come later. null - none yet.
     /// </summary>
     public string? Due(double played)
     {
         if (TimeLeft.Count == 0) return null;
         double nearest = TimeLeft.Values.Min();
-        if (played < nearest) return null;
+        if (played < Math.Max(nearest, Planner.MinMarginMinutes)) return null;
         return Ordered.Where(r => TimeLeft.TryGetValue(r.ApiName, out var left) && left == nearest)
             .OrderByDescending(r => r.Def.Percent ?? -1)
             .Select(r => r.ApiName)
@@ -114,8 +114,9 @@ public static class Planner
     public const double MaxPace = 3;
 
     /// <summary>
-    /// The wide margin past an estimate is at least this long: the rarity model puts the most common achievement at
-    /// the very start, and neither the estimates nor Steam's minutes are finer.
+    /// The least margin: the wide margin past an estimate is at least this long, and nothing is due by time before this
+    /// much play. The rarity model puts the most common achievement at the very start, and neither the estimates nor
+    /// Steam's minutes are finer.
     /// </summary>
     public const double MinMarginMinutes = 15;
 

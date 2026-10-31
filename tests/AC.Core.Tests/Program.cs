@@ -1153,7 +1153,9 @@ static class Tests
         tracker.Observe([5], t0.AddMinutes(1));
         Assert.Equal(0, tracker.Observe([5, 480], t0.AddMinutes(2)).Count);
         Assert.True(tracker.IsRunning(5) && tracker.IsRunning(480), "both run");
+        Assert.Equal<TimeSpan?>(TimeSpan.FromMinutes(1), tracker.RunningFor(480, t0.AddMinutes(3)));
         Assert.Equal(new PlaySession(480, t0.AddMinutes(2), t0.AddMinutes(50)), tracker.Observe([5], t0.AddMinutes(50)).Single());
+        Assert.Equal<TimeSpan?>(null, tracker.RunningFor(480, t0.AddMinutes(51)));
         Assert.Equal(new PlaySession(5, t0.AddMinutes(1), t0.AddMinutes(60)), tracker.Played(5, t0.AddMinutes(60)).Single());
     }
 
@@ -1332,9 +1334,11 @@ static class Tests
 
     public static void Planner_Due()
     {
-        // ch1 is the most common, at the very start: due at once.
+        // ch1 is the most common, at the very start: due after the least margin, not at once.
         var g = SampleGame();
-        Assert.Equal("ch1", Planner.Build(g, Percentile.P50).Due(0));
+        Assert.Equal<string?>(null, Planner.Build(g, Percentile.P50).Due(0));
+        Assert.Equal<string?>(null, Planner.Build(g, Percentile.P50).Due(Planner.MinMarginMinutes - 1));
+        Assert.Equal("ch1", Planner.Build(g, Percentile.P50).Due(Planner.MinMarginMinutes));
 
         // Marked, the next one counts from it.
         g.StateOf("ch1").ManualDone = true;

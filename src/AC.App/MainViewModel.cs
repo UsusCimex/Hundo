@@ -1316,7 +1316,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             await SafeAsync(RefreshStateAsync);
         }
         CountDown();
-        if (openRunning) MarkDue();
+        MarkDue();
     }
 
     /// <summary>
@@ -1326,11 +1326,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private static uint Followed(IReadOnlyCollection<uint> started) =>
         started.OrderByDescending(a => SteamLocal.InstalledGames().ContainsKey(a)).First();
 
+    /// <summary>
+    /// A game seen running for less is not taken as played: Steam names a game while the app reads its status through
+    /// the Steam client.
+    /// </summary>
+    private static readonly TimeSpan AutoMarkAfterRunning = TimeSpan.FromMinutes(1);
+
     /// <summary>With auto marks on, marks the achievement of the running open game whose time is up (<see cref="Plan.Due"/>).</summary>
     private void MarkDue()
     {
-        if (!ManualUnlocks || !_svc.Settings.AutoMark || IsBusy) return;
+        if (!ManualUnlocks || !_svc.Settings.AutoMark || IsBusy || _refreshing) return;
         if (_game is not { } game || _plan is not { } plan) return;
+        // Checked again here: the open game may have changed while the status was read.
+        if (_sessions.RunningFor(game.AppId, DateTimeOffset.Now) is not { } running || running < AutoMarkAfterRunning) return;
         if (plan.Due(PlayedSinceUnlock(game)) is not { } name || !_autoMarked.Add($"{game.AppId}/{name}")) return;
         if (_rows.FirstOrDefault(r => r.ApiName == name) is not { IsDone: false } row) return;
         var vm = new AchievementRowViewModel(this, row);

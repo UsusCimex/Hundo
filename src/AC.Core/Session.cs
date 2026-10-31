@@ -35,6 +35,9 @@ public sealed class SessionTracker
 
     public bool IsRunning(uint appId) => _running.ContainsKey(appId);
 
+    /// <summary>How long the game has been seen running; null - it is not running.</summary>
+    public TimeSpan? RunningFor(uint appId, DateTimeOffset now) => _running.TryGetValue(appId, out var r) ? now - r.Since : null;
+
     /// <summary>The play of a game seen since the app started, the running session up to now included.</summary>
     public IReadOnlyList<PlaySession> Played(uint appId, DateTimeOffset now) =>
         _played.Where(s => s.AppId == appId)
