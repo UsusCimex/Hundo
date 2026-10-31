@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using AC.Core;
 using AC.Infrastructure;
@@ -104,8 +105,22 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// A note, group or own estimate is kept when its box loses focus, which switching to the game or closing the
+    /// window does not do: what was typed would be lost.
+    /// </summary>
+    private void KeepTyped() =>
+        (FocusManager.GetFocusedElement(this) as TextBox)?.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+
+    protected override void OnDeactivated(EventArgs e)
+    {
+        KeepTyped();
+        base.OnDeactivated(e);
+    }
+
     protected override void OnClosing(CancelEventArgs e)
     {
+        KeepTyped();
         _overlay?.SavePosition();
         // Unregister the hotkeys while the window is alive (UnregisterHotKey fails once it is destroyed).
         _hotkeys?.Dispose();
