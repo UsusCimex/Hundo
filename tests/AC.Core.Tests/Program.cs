@@ -617,21 +617,30 @@ static class Tests
     public static void Update_ParseRelease()
     {
         const string json = """
-            {"tag_name": "v0.3.1", "html_url": "https://github.com/o/r/releases/tag/v0.3.1", "draft": false, "prerelease": false,
-             "assets": [{"name": "notes.txt", "browser_download_url": "https://e/notes.txt", "size": 1},
-                        {"name": "Hundo-v0.3.1-win-x64.zip", "browser_download_url": "https://e/a.zip", "size": 42,
-                         "digest": "sha256:abcdef"},
-                        {"name": "Hundo-v0.3.1-win-x64-setup.exe", "browser_download_url": "https://e/s.exe", "size": 40}]}
+            {"tag_name": "v0.3.1", "html_url": "https://github.com/UsusCimex/Hundo/releases/tag/v0.3.1", "draft": false, "prerelease": false,
+             "assets": [{"name": "notes.txt", "browser_download_url": "https://github.com/UsusCimex/Hundo/releases/download/v0.3.1/notes.txt", "size": 1},
+                        {"name": "Hundo-v0.3.1-win-x64.zip", "browser_download_url": "https://github.com/UsusCimex/Hundo/releases/download/v0.3.1/a.zip",
+                         "size": 42, "digest": "sha256:abcdef"},
+                        {"name": "Hundo-v0.3.1-win-x64-setup.exe", "browser_download_url": "https://github.com/UsusCimex/Hundo/releases/download/v0.3.1/s.exe", "size": 40}]}
             """;
-        var update = AC.Infrastructure.UpdateService.Parse(json, new Version(0, 3, 0))!;
+        static AC.Infrastructure.UpdateInfo? Parse(string json, string current = "0.3.0", bool installed = false) =>
+            AC.Infrastructure.UpdateService.Parse(json, new Version(current), installed);
+        var update = Parse(json)!;
         Assert.Equal(new Version(0, 3, 1), update.Version);
-        Assert.Equal("https://e/a.zip", update.DownloadUrl);
-        Assert.Equal("https://github.com/o/r/releases/tag/v0.3.1", update.PageUrl);
-        Assert.True(AC.Infrastructure.UpdateService.Parse(json, new Version(0, 3, 1)) is null, "same version");
-        Assert.True(AC.Infrastructure.UpdateService.Parse(json.Replace("\"prerelease\": false", "\"prerelease\": true"), new Version(0, 1, 0)) is null, "prerelease");
-        Assert.True(AC.Infrastructure.UpdateService.Parse(json.Replace("win-x64.zip", "linux.zip"), new Version(0, 1, 0)) is null, "no Windows zip");
-        Assert.Equal("https://e/s.exe", AC.Infrastructure.UpdateService.Parse(json, new Version(0, 3, 0), installed: true)!.DownloadUrl);
-        Assert.True(AC.Infrastructure.UpdateService.Parse(json.Replace("setup.exe", "setup.msi"), new Version(0, 1, 0), installed: true) is null, "no setup");
+        Assert.Equal("https://github.com/UsusCimex/Hundo/releases/download/v0.3.1/a.zip", update.DownloadUrl);
+        Assert.Equal("https://github.com/UsusCimex/Hundo/releases/tag/v0.3.1", update.PageUrl);
+        Assert.True(Parse(json, "0.3.1") is null, "same version");
+        Assert.True(Parse(json.Replace("\"prerelease\": false", "\"prerelease\": true")) is null, "prerelease");
+        Assert.True(Parse(json.Replace("win-x64.zip", "linux.zip")) is null, "no Windows zip");
+        Assert.Equal("https://github.com/UsusCimex/Hundo/releases/download/v0.3.1/s.exe", Parse(json, installed: true)!.DownloadUrl);
+        Assert.True(Parse(json.Replace("setup.exe", "setup.msi"), installed: true) is null, "no setup");
+
+        // The browser opens the links: only this repository's pages on GitHub, over https.
+        foreach (var bad in new[] { "file:///C:/Windows/notepad.exe", @"\\\\host\\share\\x.exe", "http://github.com/UsusCimex/Hundo/x.zip",
+                     "https://github.com.evil.example/UsusCimex/Hundo/x.zip", "https://github.com/someone/else/x.zip" })
+            Assert.True(Parse(json.Replace("https://github.com/UsusCimex/Hundo/releases/download/v0.3.1/a.zip", bad)) is null, "accepted " + bad);
+        Assert.Equal("", Parse(json.Replace("https://github.com/UsusCimex/Hundo/releases/tag/v0.3.1", "ms-settings:"))!.PageUrl);
+        Assert.True(Parse("""{"tag_name": 5, "assets": {}}""") is null, "not the expected shape");
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]

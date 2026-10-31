@@ -37,30 +37,37 @@ public sealed class UpdateService(HttpClient http)
 
     /// <summary>
     /// The release from GitHub's "latest release" JSON if it is newer than <paramref name="current"/>: its setup for an
-    /// installed copy, else its zip.
+    /// installed copy, else its zip. Its links must lead to this repository on GitHub: the browser opens them, and it
+    /// would open a file or a program as well.
     /// </summary>
     public static UpdateInfo? Parse(string json, Version current, bool installed = false)
     {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
-        if (root.TryGetProperty("draft", out var draft) && draft.GetBoolean()) return null;
-        if (root.TryGetProperty("prerelease", out var pre) && pre.GetBoolean()) return null;
-        var tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() ?? "" : "";
-        if (!Version.TryParse(tag.TrimStart('v', 'V'), out var version) || Trim(version) <= current) return null;
-        if (!root.TryGetProperty("assets", out var assets)) return null;
+        if (root.ValueKind != JsonValueKind.Object || Flag(root, "draft") || Flag(root, "prerelease")) return null;
+        if (!Version.TryParse(Text(root, "tag_name").TrimStart('v', 'V'), out var version) || Trim(version) <= current) return null;
+        if (!root.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array) return null;
 
         var suffix = installed ? SetupSuffix : ZipSuffix;
         foreach (var asset in assets.EnumerateArray())
         {
-            var name = asset.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-            if (!name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) continue;
-            return new UpdateInfo(
-                Trim(version),
-                root.TryGetProperty("html_url", out var page) ? page.GetString() ?? "" : "",
-                asset.GetProperty("browser_download_url").GetString() ?? "");
+            if (asset.ValueKind != JsonValueKind.Object || !Text(asset, "name").EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) continue;
+            var download = Text(asset, "browser_download_url");
+            var page = Text(root, "html_url");
+            return OfThisRepository(download) ? new UpdateInfo(Trim(version), OfThisRepository(page) ? page : "", download) : null;
         }
         return null;
     }
+
+    private static bool Flag(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
+
+    private static string Text(JsonElement e, string name) =>
+        e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+
+    private static bool OfThisRepository(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps &&
+        u.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase) &&
+        u.AbsolutePath.StartsWith($"/{Repository}/", StringComparison.OrdinalIgnoreCase);
 
     private static Version Trim(Version? v) => v is null ? new Version(0, 0, 0) : new Version(v.Major, v.Minor, Math.Max(0, v.Build));
 }
