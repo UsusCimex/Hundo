@@ -256,7 +256,7 @@
   "settings.interactKey": "Click mode",
   "settings.opacity": "Background opacity",
   "settings.nearest": "How many \"up next\" to show",
-  "settings.overlayAuto": "Show the overlay when the game starts and on an unlock or a mark, hide it when the game closes",
+  "settings.overlayAuto": "Show the overlay when the game starts and on new achievements",
   "settings.overlayHint": "Click a box and press the shortcut. The overlay shows over windowed and borderless games, not over exclusive fullscreen.",
   "settings.dataTitle": "Data",
   "settings.openData": "Open folder",
