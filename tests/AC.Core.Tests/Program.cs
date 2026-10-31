@@ -748,6 +748,8 @@ static class Tests
         """;
         Assert.Equal(15674.0, AC.Infrastructure.SteamHunters.ParseMedian(app));
         Assert.Equal((double?)null, AC.Infrastructure.SteamHunters.ParseMedian("""{"appId":1,"medianCompletionTime":0}"""));
+        // A game the site does not know: it answers null.
+        Assert.Equal((double?)null, AC.Infrastructure.SteamHunters.ParseMedian("null"));
         var pct = AC.Infrastructure.SteamHunters.ParsePercentages(achievements);
         Assert.Equal(62.6, pct["a0"]);
         Assert.Equal(2, pct.Count);

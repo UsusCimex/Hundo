@@ -20,10 +20,12 @@ public sealed class SteamHunters(HttpClient http)
     public async Task<Dictionary<string, double>> GetGlobalPercentagesAsync(uint appId, CancellationToken ct = default) =>
         await GetAsync($"{Base}/{appId}/achievements", ct) is { } json ? ParsePercentages(json) : new();
 
+    /// <summary>The median from the site's answer; it is "null" for a game it does not know (a new one, one without achievements).</summary>
     public static double? ParseMedian(string json)
     {
         using var doc = JsonDocument.Parse(json);
-        return doc.RootElement.TryGetProperty("medianCompletionTime", out var v) && v.ValueKind == JsonValueKind.Number &&
+        return doc.RootElement.ValueKind == JsonValueKind.Object &&
+               doc.RootElement.TryGetProperty("medianCompletionTime", out var v) && v.ValueKind == JsonValueKind.Number &&
                v.GetDouble() > 0 ? v.GetDouble() : null;
     }
 
