@@ -58,6 +58,8 @@ public sealed class AchievementState
     public DateTimeOffset? SteamUnlockTime { get; set; }
     public bool ManualDone { get; set; }
     public DateTimeOffset? ManualAt { get; set; }
+    /// <summary>When the app marked it by time (auto mark): one the user unmarks is not marked by time again.</summary>
+    public DateTimeOffset? AutoMarkedAt { get; set; }
     public string Note { get; set; } = "";
     /// <summary>The user took it off the overlay: a missed one stays there until the next playthrough otherwise.</summary>
     public bool OffOverlay { get; set; }
@@ -212,6 +214,7 @@ public sealed class GameData
 /// <summary>List row: schema + state + tags + estimate.</summary>
 /// <param name="Behind">Locked, and the player has gone past it by the order of unlocks (<see cref="GameLogic.Behind"/>).</param>
 /// <param name="OffOverlay">The user took it off the overlay (<see cref="AchievementState.OffOverlay"/>).</param>
+/// <param name="AutoMarkUndone">Locked, though the app once marked it by time: the user took that mark back.</param>
 public sealed record AchievementRow(
     AchievementDef Def,
     EffectiveStatus Status,
@@ -224,7 +227,8 @@ public sealed record AchievementRow(
     bool GroupIsAuto = false,
     bool ProbablyMissed = false,
     bool Behind = false,
-    bool OffOverlay = false)
+    bool OffOverlay = false,
+    bool AutoMarkUndone = false)
 {
     public string ApiName => Def.ApiName;
     public bool IsDone => Status != EffectiveStatus.Locked;

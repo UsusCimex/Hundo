@@ -70,17 +70,19 @@ public sealed record Plan(
     /// <summary>
     /// The achievement whose time is up after that play: the nearest one ahead, once the play reaches its time left
     /// and the least margin (the most common one is at the very start of the scale). Of several at the same point
-    /// the most common goes first; the others share the stretch and come later. null - none yet.
+    /// the most common goes first; the others share the stretch and come later. One whose mark by time the user took
+    /// back is left to the user. null - none yet.
     /// </summary>
     public string? Due(double played)
     {
-        if (TimeLeft.Count == 0) return null;
-        double nearest = TimeLeft.Values.Min();
+        var ahead = Ordered.Where(r => !r.AutoMarkUndone && TimeLeft.ContainsKey(r.ApiName)).ToList();
+        if (ahead.Count == 0) return null;
+        double nearest = ahead.Min(r => TimeLeft[r.ApiName]);
         if (played < Math.Max(nearest, Planner.MinMarginMinutes)) return null;
-        return Ordered.Where(r => TimeLeft.TryGetValue(r.ApiName, out var left) && left == nearest)
+        return ahead.Where(r => TimeLeft[r.ApiName] == nearest)
             .OrderByDescending(r => r.Def.Percent ?? -1)
             .Select(r => r.ApiName)
-            .FirstOrDefault();
+            .First();
     }
 
     /// <summary>The time to 100% after that play: the longest countdown and the deferred stretches; null - nothing to count.</summary>

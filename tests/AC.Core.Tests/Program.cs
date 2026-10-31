@@ -1352,6 +1352,18 @@ static class Tests
         // Of two at the same point the most common goes first.
         g.ManualEstimates["grind"] = g.Estimates["misc"].P50!.Value;
         Assert.Equal("misc", Planner.Build(g, Percentile.P50).Due(misc));
+
+        // A mark by time the user took back is left to them: the next one ahead is due after its own time.
+        var back = SampleGame();
+        back.StateOf("ch1").ManualDone = true;
+        back.StateOf("ch1").ManualAt = DateTimeOffset.Now;
+        back.StateOf("misc").AutoMarkedAt = DateTimeOffset.Now;
+        plan = Planner.Build(back, Percentile.P50);
+        Assert.True(plan.Ordered.Single(r => r.ApiName == "misc").AutoMarkUndone, "misc was taken back");
+        var (next, left) = plan.TimeLeft.Where(kv => kv.Key != "misc").MinBy(kv => kv.Value);
+        Assert.True(left > misc, $"{next} comes after misc: {left}");
+        Assert.Equal<string?>(null, plan.Due(left - 1));
+        Assert.Equal(next, plan.Due(left));
     }
 
     public static void Session_SummaryTakesBackItsUnlocks()

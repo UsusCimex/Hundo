@@ -74,7 +74,8 @@ public static class GameLogic
                 t is { Group.Length: > 0, GroupIsManual: false },
                 missed.Contains(def.ApiName) || gonePast && kind == AchievementKind.Missable,
                 gonePast,
-                s?.OffOverlay == true));
+                s?.OffOverlay == true,
+                status == EffectiveStatus.Locked && s?.AutoMarkedAt is not null));
         }
         return rows;
     }
