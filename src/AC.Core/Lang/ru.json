@@ -407,6 +407,7 @@
   },
   "status.tagsBad": "Файл разметки не читается: {0}",
   "status.newlyUnlocked": "Получено: {0}",
+  "status.leftBehind": "Похоже, пропущено: {0}",
   "status.translateInBrowser": "Переводчик не ответил: перевод откроется в браузере",
   "status.hotkeysFailed": "Не удалось назначить горячие клавиши (заняты или неверный формат): {0}",
   "status.settingsSaved": "Настройки сохранены",

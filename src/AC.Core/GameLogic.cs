@@ -47,8 +47,8 @@ public static class GameLogic
 
     public static IReadOnlyList<AchievementRow> BuildRows(GameData game, Percentile p)
     {
-        var missed = ProbablyMissed(game);
         var behind = Behind(game);
+        var missed = Missed(game, behind);
         var rows = new List<AchievementRow>(game.Achievements.Count);
         foreach (var def in game.Achievements)
         {
@@ -73,7 +73,7 @@ public static class GameLogic
                     _ => null,
                 },
                 t is { Group.Length: > 0, GroupIsManual: false },
-                missed.Contains(def.ApiName) || gonePast && kind == AchievementKind.Missable,
+                missed.Contains(def.ApiName),
                 gonePast,
                 s?.OffOverlay == true,
                 status == EffectiveStatus.Locked && s?.AutoMarkedAt is not null,
@@ -83,13 +83,41 @@ public static class GameLogic
     }
 
     /// <summary>
+    /// The missables the new unlocks left behind: taken for missed now (<see cref="Missed"/>) and not without them,
+    /// in the schema's order.
+    /// </summary>
+    public static IReadOnlyList<string> LeftBehind(GameData game, IReadOnlyCollection<string> unlocked)
+    {
+        var notYet = unlocked.ToHashSet(StringComparer.Ordinal);
+        var before = Missed(game, Behind(game, notYet), notYet);
+        var now = Missed(game, Behind(game));
+        return game.Achievements.Select(a => a.ApiName).Where(n => now.Contains(n) && !before.Contains(n)).ToList();
+    }
+
+    /// <summary>Locked missables taken for missed: their part of the game is over, or the player has gone past them.</summary>
+    /// <param name="behind">The achievements gone past (<see cref="Behind"/>).</param>
+    private static HashSet<string> Missed(GameData game, IReadOnlySet<string> behind, IReadOnlySet<string>? notYet = null)
+    {
+        var missed = ProbablyMissed(game, notYet).ToHashSet(StringComparer.Ordinal);
+        missed.UnionWith(behind.Where(n => game.Tags.GetValueOrDefault(n)?.Kind == AchievementKind.Missable));
+        return missed;
+    }
+
+    /// <param name="notYet">Achievements just unlocked in Steam, taken as before that: done only by a manual mark.</param>
+    private static bool IsDone(GameData game, string apiName, IReadOnlySet<string>? notYet)
+    {
+        var s = game.States.GetValueOrDefault(apiName);
+        if (notYet?.Contains(apiName) == true) return game.CountManualMarks && s?.ManualDone == true;
+        return StatusOf(s, game.CountManualMarks) != EffectiveStatus.Locked;
+    }
+
+    /// <summary>
     /// Locked achievements the player has gone past on the typical player's scale (<see cref="Progress.Behind"/>):
     /// players usually unlock them before achievements this player already has.
     /// </summary>
-    public static IReadOnlySet<string> Behind(GameData game) =>
+    public static IReadOnlySet<string> Behind(GameData game, IReadOnlySet<string>? notYet = null) =>
         AC.Core.Progress.Behind(game.Achievements
-            .Select(a => (a.ApiName, At: EstimateOf(game, a.ApiName, Percentile.P50, out _),
-                Done: StatusOf(game.States.GetValueOrDefault(a.ApiName), game.CountManualMarks) != EffectiveStatus.Locked))
+            .Select(a => (a.ApiName, At: EstimateOf(game, a.ApiName, Percentile.P50, out _), Done: IsDone(game, a.ApiName, notYet)))
             .Where(a => a.At.HasValue)
             .Select(a => (a.ApiName, a.At!.Value, a.Done)), Planner.MinMarginMinutes);
 
@@ -98,7 +126,7 @@ public static class GameLogic
     /// a story achievement of that part or a later one is done, or any achievement of a later part.
     /// The place comes from the group, else from the description or the name.
     /// </summary>
-    public static IReadOnlySet<string> ProbablyMissed(GameData game)
+    public static IReadOnlySet<string> ProbablyMissed(GameData game, IReadOnlySet<string>? notYet = null)
     {
         var places = new Dictionary<string, (string Series, int Number)>(StringComparer.Ordinal);
         foreach (var a in game.Achievements)
@@ -112,7 +140,7 @@ public static class GameLogic
         var over = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var (name, place) in places)
         {
-            if (StatusOf(game.States.GetValueOrDefault(name), game.CountManualMarks) == EffectiveStatus.Locked) continue;
+            if (!IsDone(game, name, notYet)) continue;
             int done = game.Tags.GetValueOrDefault(name)?.Kind == AchievementKind.Story ? place.Number : place.Number - 1;
             over[place.Series] = Math.Max(over.GetValueOrDefault(place.Series, int.MinValue), done);
         }
@@ -121,7 +149,7 @@ public static class GameLogic
         foreach (var (name, place) in places)
         {
             if (game.Tags.GetValueOrDefault(name)?.Kind != AchievementKind.Missable) continue;
-            if (StatusOf(game.States.GetValueOrDefault(name), game.CountManualMarks) != EffectiveStatus.Locked) continue;
+            if (IsDone(game, name, notYet)) continue;
             if (over.TryGetValue(place.Series, out var last) && last >= place.Number) missed.Add(name);
         }
         return missed;

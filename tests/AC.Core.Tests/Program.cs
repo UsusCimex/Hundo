@@ -232,6 +232,33 @@ static class Tests
         Assert.Equal(0, GameLogic.ProbablyMissed(g).Count);
     }
 
+    public static void Missable_LeftBehindByNewUnlocks()
+    {
+        var g = SampleGame();
+        GameLogic.SetGroup(g, "miss", "Chapter 3");
+        g.StateOf("ch1").SteamUnlocked = true;
+        Assert.Equal("", string.Join(",", GameLogic.LeftBehind(g, ["ch1"])));
+
+        // Chapter 5 is done: that unlock left the chapter 3 one behind, and a later one does not say it again.
+        g.StateOf("ch5").SteamUnlocked = true;
+        Assert.Equal("miss", string.Join(",", GameLogic.LeftBehind(g, ["ch5"])));
+        g.StateOf("misc").SteamUnlocked = true;
+        Assert.Equal("", string.Join(",", GameLogic.LeftBehind(g, ["misc"])));
+
+        // Marked by hand before Steam had it: the mark already left it behind.
+        g.StateOf("ch5").SteamUnlocked = false;
+        g.StateOf("ch5").ManualDone = true;
+        g.StateOf("ch5").SteamUnlocked = true;
+        Assert.Equal("", string.Join(",", GameLogic.LeftBehind(g, ["ch5"])));
+
+        // Without a chapter: players get it before the rarest one, which the player now has.
+        var h = SampleGame();
+        foreach (var name in new[] { "ch1", "misc", "ch5" }) h.StateOf(name).SteamUnlocked = true;
+        Assert.Equal("", string.Join(",", GameLogic.LeftBehind(h, ["ch5"])));
+        h.StateOf("grind").SteamUnlocked = true;
+        Assert.Equal("miss", string.Join(",", GameLogic.LeftBehind(h, ["grind"])));
+    }
+
     public static void Planner_StageOrder()
     {
         var g = SampleGame();

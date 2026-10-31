@@ -396,6 +396,7 @@
   },
   "status.tagsBad": "Cannot read the tags file: {0}",
   "status.newlyUnlocked": "Unlocked: {0}",
+  "status.leftBehind": "Probably missed: {0}",
   "status.translateInBrowser": "The translator did not answer: the translation opens in the browser",
   "status.hotkeysFailed": "Could not register hotkeys (taken or invalid): {0}",
   "status.settingsSaved": "Settings saved",

@@ -1376,9 +1376,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void AnnounceNew(IReadOnlyList<string> apiNames)
     {
-        if (_game is null || apiNames.Count == 0) return;
-        var names = apiNames.Select(n => _game.Achievements.FirstOrDefault(a => a.ApiName == n)?.Name ?? n).ToList();
-        var text = Loc.T("status.newlyUnlocked", string.Join(", ", names));
+        if (_game is not { } game || apiNames.Count == 0) return;
+        string NameOf(string apiName) => game.Achievements.FirstOrDefault(a => a.ApiName == apiName)?.Name ?? apiName;
+        var text = Loc.T("status.newlyUnlocked", string.Join(", ", apiNames.Select(NameOf)));
+        // Told at once, the player can still load a save before the game overwrites it.
+        if (GameLogic.LeftBehind(game, apiNames) is { Count: > 0 } missed)
+            text += ". " + Loc.T("status.leftBehind", string.Join(", ", missed.Select(NameOf)));
         StatusMessage = text;
         Toast?.Invoke(text);
     }
