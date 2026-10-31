@@ -33,10 +33,12 @@ public sealed record ReviewAuthor(ulong SteamId, double PlaytimeAtReview, double
 /// <summary>
 /// Official Steam Web API client.
 /// Valve limits a key to 100,000 requests a day; the app caches the schema for a day.
+/// AC_STEAM_API_URL points it at another host (a local test server).
 /// </summary>
 public sealed class SteamWebApi(HttpClient http)
 {
-    private const string Base = "https://api.steampowered.com";
+    private static readonly string Base =
+        Environment.GetEnvironmentVariable("AC_STEAM_API_URL") is { Length: > 0 } url ? url.TrimEnd('/') : "https://api.steampowered.com";
 
     public async Task<List<OwnedGame>> GetOwnedGamesAsync(string key, ulong steamId, CancellationToken ct = default)
     {
