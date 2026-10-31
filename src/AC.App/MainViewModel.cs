@@ -987,6 +987,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void SetGame(GameData game)
     {
         _game = game;
+        // Here and not at the end of a load: a load dropped for a game picked meanwhile would take its place.
+        if (_svc.Settings.LastAppId != game.AppId)
+        {
+            _svc.Settings.LastAppId = game.AppId;
+            _svc.SaveSettings();
+        }
         _guides = null;
         GameName = game.Name.Length > 0 ? game.Name : $"AppID {game.AppId}";
         SelectedRow = null;

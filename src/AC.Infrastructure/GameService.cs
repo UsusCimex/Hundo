@@ -198,8 +198,6 @@ public sealed class GameService
         GameLogic.AutoClassify(game);
         TimeEstimator.EstimateFromGlobalPercent(game);
         _store.SaveGame(game);
-        Settings.LastAppId = appId;
-        SaveSettings();
         foreach (var w in warnings) AppLog.Info($"{appId}: {w}");
         return new LoadReport(game, fresh, warnings, percentagesMissing);
     }
