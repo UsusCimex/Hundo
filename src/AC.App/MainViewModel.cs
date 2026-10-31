@@ -677,6 +677,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             SetGame(report.Game);
             StatusMessage = report.Warnings.Count > 0 ? string.Join(" | ", report.Warnings) : Loc.T("status.reloaded");
             AnnounceNew(report.NewlyUnlocked);
+            // The tips go with the game object, and a new content language needs its own.
+            _ = SafeAsync(() => LoadGuidesAsync(report.Game));
         });
     }
 
