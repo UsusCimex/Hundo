@@ -101,7 +101,7 @@ public partial class MainWindow : Window
         var s = _vm.Service.Settings;
         var problems = new List<string>();
         if (!_hotkeys.Register(s.OverlayToggleHotkey, ToggleOverlay)) problems.Add(s.OverlayToggleHotkey);
-        if (!_hotkeys.Register(s.OverlayInteractHotkey, () => EnsureOverlay().ToggleInteractive())) problems.Add(s.OverlayInteractHotkey);
+        if (!_hotkeys.Register(s.OverlayInteractHotkey, ToggleClickMode)) problems.Add(s.OverlayInteractHotkey);
         _hotkeyProblem = problems.Count > 0 ? Loc.T("status.hotkeysFailed", string.Join(", ", problems)) : null;
         if (_hotkeyProblem is not null) _vm.StatusMessage = _hotkeyProblem;
     }
@@ -161,6 +161,13 @@ public partial class MainWindow : Window
         if (!_overlayForToast) return;
         _overlayForToast = false;
         if (!_overlayForGame) _overlay?.HideToGame();
+    }
+
+    /// <summary>The player uses the overlay: a message that showed it no longer hides it when it goes.</summary>
+    private void ToggleClickMode()
+    {
+        _overlayForToast = false;
+        EnsureOverlay().ToggleInteractive();
     }
 
     private void OnToggleOverlay(object sender, RoutedEventArgs e) => ToggleOverlay();
