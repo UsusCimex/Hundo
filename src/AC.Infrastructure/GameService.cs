@@ -407,6 +407,12 @@ public sealed class GameService
                 fatal ??= e;
                 stop.Cancel();
             }
+            catch (Exception e) when (HangGuard.IsUnanswered(e))
+            {
+                // So does a Web API that stopped answering: skipped, the players after would leave a sample of a few.
+                fatal ??= new SteamApiException(e.Message);
+                stop.Cancel();
+            }
             catch (Exception e) when (e is SteamApiException or HttpRequestException or OperationCanceledException or System.Text.Json.JsonException)
             {
                 // private profile or failure - skip the player

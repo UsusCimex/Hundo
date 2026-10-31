@@ -949,6 +949,27 @@ static class Tests
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Service_SampleStopsWhenTheApiStopsAnswering()
+    {
+        // One player is never answered: the host rests, and the players after it fail at once.
+        const string player = """{"playerstats":{"success":true,"achievements":[{"apiname":"ch1","achieved":1,"unlocktime":1700000000}]}}""";
+        var fake = new FakeHttp(url =>
+            url.Contains("IUserReviewsService/GetAppReviews") ? (HttpStatusCode.OK, Reviews)
+            : url.Contains("GetPlayerAchievements") ? (HttpStatusCode.OK, player)
+            : (HttpStatusCode.NotFound, ""),
+            hangs: url => url.Contains("steamid=76561197960287933"));
+        WithService(new AC.Infrastructure.HangGuard(fake, TimeSpan.FromMilliseconds(200), TimeSpan.FromMinutes(1)), (svc, store) =>
+        {
+            try
+            {
+                svc.CollectSampleAsync(SampleGame()).GetAwaiter().GetResult();
+                Assert.True(false, "no sample of the few asked before the host stopped answering");
+            }
+            catch (AC.Infrastructure.SteamApiException) { }
+        });
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public static void Service_PercentagesMissingOnlyWhenNobodyHasThem()
     {
         var fake = new FakeHttp(url =>
@@ -1031,7 +1052,7 @@ static class Tests
         """;
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    static void WithService(FakeHttp fake, Action<AC.Infrastructure.GameService, AC.Infrastructure.JsonStore> body)
+    static void WithService(HttpMessageHandler fake, Action<AC.Infrastructure.GameService, AC.Infrastructure.JsonStore> body)
     {
         var dir = Path.Combine(Path.GetTempPath(), "ac-test-" + Guid.NewGuid().ToString("N"));
         try
@@ -2028,15 +2049,17 @@ sealed class HangingHttp : HttpMessageHandler
     }
 }
 
-sealed class FakeHttp(Func<string, (HttpStatusCode Status, string Body)> answer) : HttpMessageHandler
+/// <param name="hangs">The URLs never answered.</param>
+sealed class FakeHttp(Func<string, (HttpStatusCode Status, string Body)> answer, Func<string, bool>? hangs = null) : HttpMessageHandler
 {
     public List<string> Urls { get; } = new();
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         var url = request.RequestUri!.ToString();
         lock (Urls) Urls.Add(url);
+        if (hangs?.Invoke(url) == true) await Task.Delay(Timeout.Infinite, ct);
         var (status, body) = answer(url);
-        return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body) });
+        return new HttpResponseMessage(status) { Content = new StringContent(body) };
     }
 }

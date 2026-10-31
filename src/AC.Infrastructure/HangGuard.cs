@@ -17,7 +17,7 @@ public sealed class HangGuard(HttpMessageHandler inner, TimeSpan timeout, TimeSp
     {
         var host = request.RequestUri?.Host ?? "";
         if (_restUntil.TryGetValue(host, out var until) && DateTimeOffset.UtcNow < until)
-            throw new HttpRequestException(Loc.T("error.hostResting", host));
+            throw new HttpRequestException(Loc.T("error.hostResting", host), new TimeoutException());
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limit.CancelAfter(timeout);
         try
@@ -27,7 +27,13 @@ public sealed class HangGuard(HttpMessageHandler inner, TimeSpan timeout, TimeSp
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             _restUntil[host] = DateTimeOffset.UtcNow + rest;
-            throw new TaskCanceledException(Loc.T("error.hostTimeout", host, timeout.TotalSeconds));
+            throw new TaskCanceledException(Loc.T("error.hostTimeout", host, timeout.TotalSeconds), new TimeoutException());
         }
     }
+
+    /// <summary>
+    /// The request went unanswered, here or by HttpClient's own timeout: the host's next requests would fail the same
+    /// way for a while.
+    /// </summary>
+    public static bool IsUnanswered(Exception e) => e.InnerException is TimeoutException;
 }
