@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace AC.Core.SteamFormats;
@@ -92,14 +93,16 @@ public static class TextVdf
     }
 
     /// <summary>
-    /// From loginusers.vdf: SteamID64 of the most recently logged-in user (MostRecent = 1),
-    /// else the first one in the list.
+    /// From loginusers.vdf: SteamID64 and name of the user who signed in last: the one marked MostRecent in older files,
+    /// else the latest sign-in time; <paramref name="signedIn"/>, the account Steam runs under, when it is there.
     /// </summary>
-    public static (ulong SteamId, string PersonaName)? MostRecentUser(string loginUsersVdf)
+    public static (ulong SteamId, string PersonaName)? MostRecentUser(string loginUsersVdf, ulong signedIn = 0)
     {
         var users = Parse(loginUsersVdf)["users"];
         if (users is null || users.Children.Count == 0) return null;
-        VdfNode? pick = users.Children.FirstOrDefault(u => u.Get("MostRecent") == "1") ?? users.Children[0];
+        var pick = users.Children.FirstOrDefault(u => signedIn != 0 && u.Name == signedIn.ToString(CultureInfo.InvariantCulture))
+                   ?? users.Children.FirstOrDefault(u => u.Get("MostRecent") == "1")
+                   ?? users.Children.MaxBy(u => long.TryParse(u.Get("timestamp"), out var t) ? t : 0)!;
         return ulong.TryParse(pick.Name, out var id) ? (id, pick.Get("PersonaName")) : null;
     }
 

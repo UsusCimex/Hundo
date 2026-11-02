@@ -923,6 +923,18 @@ static class Tests
         var u = TextVdf.MostRecentUser(vdf);
         Assert.Equal(76561198000000002UL, u!.Value.SteamId);
         Assert.Equal("Usus \"Cimex\"", u.Value.PersonaName);
+        Assert.Equal(76561198000000001UL, TextVdf.MostRecentUser(vdf, signedIn: 76561198000000001)!.Value.SteamId);
+
+        // Newer files keep the time of the last sign-in instead of MostRecent.
+        const string timestamps = """
+        "users"
+        {
+            "76561198000000001" { "PersonaName" "Old" "timestamp" "1700000000" }
+            "76561198000000002" { "PersonaName" "New" "timestamp" "1760000000" }
+            "76561198000000003" { "PersonaName" "Older" "timestamp" "1600000000" }
+        }
+        """;
+        Assert.Equal(76561198000000002UL, TextVdf.MostRecentUser(timestamps)!.Value.SteamId);
     }
 
     public static void Vdf_LibrariesAndRunningGames()

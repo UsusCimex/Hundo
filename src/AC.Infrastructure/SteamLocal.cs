@@ -185,9 +185,10 @@ public static class SteamLocal
         if (!File.Exists(path)) return null;
         try
         {
-            return TextVdf.MostRecentUser(File.ReadAllText(path));
+            uint signedIn = SignedInAccountId();
+            return TextVdf.MostRecentUser(File.ReadAllText(path), signedIn == 0 ? 0 : SteamId64Base + signedIn);
         }
-        catch (IOException) { return null; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 
     public static string? StatsDir()
