@@ -1075,6 +1075,18 @@ static class Tests
         Assert.True(!new AC.Infrastructure.SteamApiException("x", null, AC.Infrastructure.SteamFailure.Private).Fatal, "private goes on");
     }
 
+    public static void StoreAssets_LooksAgainAfterNoAnswer()
+    {
+        const uint app = 3900001;
+        var url = $"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{app}/header.jpg";
+        using var offline = new HttpClient(new FakeHttp(_ => throw new HttpRequestException("offline")));
+        Assert.Equal(null, AC.Infrastructure.StoreAssets.ResolveAsync(offline, url).GetAwaiter().GetResult());
+        var items = $$$"""{"response":{"store_items":[{"assets":{"asset_url_format":"steam/apps/{{{app}}}/abc/${FILENAME}","header":"header.jpg"}}]}}""";
+        using var online = new HttpClient(new FakeHttp(u => u.Contains("GetItems") ? (HttpStatusCode.OK, items) : (HttpStatusCode.NotFound, "")));
+        Assert.Equal($"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{app}/abc/header.jpg",
+            AC.Infrastructure.StoreAssets.ResolveAsync(online, url).GetAwaiter().GetResult());
+    }
+
     public static void StoreAssets_Parse()
     {
         const string items = """

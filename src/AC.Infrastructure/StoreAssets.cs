@@ -22,7 +22,7 @@ public static partial class StoreAssets
         ["capsule_231x87.jpg"] = "small_capsule",
     };
 
-    private static readonly Dictionary<uint, Task<Dictionary<string, string>>> Apps = new();
+    private static readonly Dictionary<uint, Task<Dictionary<string, string>?>> Apps = new();
     private static readonly Lock Gate = new();
 
     /// <summary>Where the picture behind a plain store URL really is; null - not a store URL or not found.</summary>
@@ -31,16 +31,22 @@ public static partial class StoreAssets
         var m = Plain().Match(url);
         if (!m.Success || !AssetOfFile.TryGetValue(m.Groups["file"].Value, out var asset)) return null;
         var appId = uint.Parse(m.Groups["id"].Value);
-        Task<Dictionary<string, string>> task;
+        Task<Dictionary<string, string>?> task;
         lock (Gate)
         {
             if (!Apps.TryGetValue(appId, out task!))
                 Apps[appId] = task = LoadAsync(http, appId, ct);
         }
-        return (await task).GetValueOrDefault(asset);
+        var assets = await task;
+        // The store's answer is kept; a lookup that got none (no network) is made again for the next picture.
+        if (assets is null)
+            lock (Gate)
+                if (Apps.TryGetValue(appId, out var kept) && kept == task) Apps.Remove(appId);
+        return assets?.GetValueOrDefault(asset);
     }
 
-    private static async Task<Dictionary<string, string>> LoadAsync(HttpClient http, uint appId, CancellationToken ct)
+    /// <summary>The app's assets by name; null - neither the API nor the store answered.</summary>
+    private static async Task<Dictionary<string, string>?> LoadAsync(HttpClient http, uint appId, CancellationToken ct)
     {
         try
         {
@@ -58,7 +64,7 @@ public static partial class StoreAssets
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException)
         {
-            return new();
+            return null;
         }
     }
 
