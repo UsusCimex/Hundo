@@ -46,7 +46,7 @@ public static class SteamLocal
         }
         uint named = NamedAppId();
         var running = RunningGames.ByProcess(ProcessPaths(), InstalledGames(), named);
-        if (named != 0) running.Add(named);
+        if (named != 0 && HasAchievements(named)) running.Add(named);
         return running;
     }
 
@@ -63,8 +63,9 @@ public static class SteamLocal
 
     /// <summary>
     /// Installed games with achievements and their folders, from the app manifests of the Steam libraries; read again
-    /// after a few minutes. Apps without an achievement schema in Steam's cache are left out: the tools that run in the
-    /// background (Wallpaper Engine) or next to a game (the Steamworks redistributables at its first start).
+    /// after a few minutes. Apps without achievements in Steam's cached schema are left out: the tools that run in the
+    /// background (Wallpaper Engine) or next to a game (the Steamworks redistributables at its first start), and games
+    /// with stats only.
     /// </summary>
     public static IReadOnlyDictionary<uint, string> InstalledGames()
     {
@@ -72,7 +73,6 @@ public static class SteamLocal
         var games = new Dictionary<uint, string>();
         if (SteamPath() is { } steam)
         {
-            var stats = Path.Combine(steam, "appcache", "stats");
             var libraries = new List<string> { steam };
             try { libraries.AddRange(TextVdf.LibraryPaths(File.ReadAllText(Path.Combine(steam, "steamapps", "libraryfolders.vdf")))); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
@@ -87,8 +87,7 @@ public static class SteamLocal
                     {
                         try
                         {
-                            if (TextVdf.AppManifest(File.ReadAllText(file)) is { } m &&
-                                File.Exists(Path.Combine(stats, $"UserGameStatsSchema_{m.AppId}.bin")))
+                            if (TextVdf.AppManifest(File.ReadAllText(file)) is { } m && HasAchievements(m.AppId))
                                 games[m.AppId] = FinalPath(Path.GetFullPath(Path.Combine(apps, "common", m.InstallDir)));
                         }
                         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { }
@@ -99,6 +98,23 @@ public static class SteamLocal
         }
         _installed = new InstalledCache(DateTime.UtcNow, games);
         return games;
+    }
+
+    private static readonly Dictionary<uint, (DateTime WrittenAt, bool Has)> Schemas = new();
+
+    /// <summary>Steam's cached schema of the app has achievements; read again when Steam rewrites it.</summary>
+    public static bool HasAchievements(uint appId)
+    {
+        if (StatsDir() is not { } dir) return false;
+        var file = new FileInfo(Path.Combine(dir, $"UserGameStatsSchema_{appId}.bin"));
+        if (!file.Exists) return false;
+        lock (Schemas)
+            if (Schemas.TryGetValue(appId, out var known) && known.WrittenAt == file.LastWriteTimeUtc) return known.Has;
+        // A file Steam is writing reads as nothing: asked again on the next look.
+        if (BinaryKeyValue.Load(file.FullName) is not { } kv) return false;
+        bool has = StatsSchemaReader.Read(kv, appId, "english").Count > 0;
+        lock (Schemas) Schemas[appId] = (file.LastWriteTimeUtc, has);
+        return has;
     }
 
     /// <summary>
