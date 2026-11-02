@@ -79,6 +79,8 @@ public partial class OverlayWindow : Window
         Closed += (_, _) => { _toastTimer.Stop(); _vm.Detach(); };
         LocationChanged += (_, _) => FitHeight();
         DpiChanged += (_, _) => FitHeight();
+        // A screen may have gone since it was last shown.
+        IsVisibleChanged += (_, e) => { if (e.NewValue is true) KeepOnScreen(); };
         var s = main.Service.Settings;
         Left = s.OverlayLeft;
         Top = s.OverlayTop;
@@ -142,18 +144,16 @@ public partial class OverlayWindow : Window
         else Native.SetExStyle(_hwnd, Native.WS_EX_TRANSPARENT | Native.WS_EX_LAYERED, 0);
     }
 
-    /// <summary>If the saved position is off all screens (the monitor changed), moves it back to the corner.</summary>
+    /// <summary>
+    /// If the top-left corner it is dragged by is on no screen (a monitor was unplugged, or the position falls between
+    /// screens of different sizes), moves it to the corner of the main screen.
+    /// </summary>
     private void KeepOnScreen()
     {
-        var left = SystemParameters.VirtualScreenLeft;
-        var top = SystemParameters.VirtualScreenTop;
-        var right = left + SystemParameters.VirtualScreenWidth;
-        var bottom = top + SystemParameters.VirtualScreenHeight;
-        if (Left < left || Left > right - 50 || Top < top || Top > bottom - 50)
-        {
-            Left = left + 40;
-            Top = top + 120;
-        }
+        if (_hwnd == IntPtr.Zero || !Native.GetWindowRect(_hwnd, out var rect)) return;
+        if (Native.OnAScreen(new Native.RECT { Left = rect.Left, Top = rect.Top, Right = rect.Left + 50, Bottom = rect.Top + 50 })) return;
+        Left = SystemParameters.WorkArea.Left + 40;
+        Top = SystemParameters.WorkArea.Top + 120;
     }
 
     /// <summary>

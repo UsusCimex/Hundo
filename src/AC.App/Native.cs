@@ -56,6 +56,12 @@ internal static class Native
     [DllImport("user32.dll")]
     private static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromRect(ref RECT rect, uint flags);
+
+    /// <summary>Some of the rectangle, in pixels, is on a screen.</summary>
+    public static bool OnAScreen(RECT rect) => MonitorFromRect(ref rect, 0) != IntPtr.Zero;
+
     /// <summary>The work area of the screen the window is on (the nearest one), in pixels.</summary>
     public static RECT? WorkAreaOf(IntPtr hwnd)
     {
