@@ -1845,6 +1845,28 @@ static class Tests
         Assert.Equal(new Countdown(5, false), start.CountDown(Planner.MinMarginMinutes - 5)["ch1"]);
     }
 
+    public static void Planner_MarkedByTimeNoneIsGonePast()
+    {
+        // ch1 is skipped, misc and ch5 after it are done: gone past, it leaves the way.
+        var g = SampleGame();
+        g.StateOf("misc").SteamUnlocked = true;
+        g.StateOf("ch5").SteamUnlocked = true;
+        Assert.Equal("ch1", string.Join(",", Planner.Build(g, Percentile.P50).Passed));
+        // Marked by time, it stays on the way: its time is up, so it is the one due.
+        g.MarkByTime = true;
+        var plan = Planner.Build(g, Percentile.P50);
+        Assert.Equal(0, plan.Passed.Count);
+        Assert.Equal("ch1", plan.Due(plan.TimeLeft["ch1"]));
+
+        // A missable one gone past is not taken for missed either; a later chapter done still tells it was.
+        var m = SampleGame();
+        m.MarkByTime = true;
+        foreach (var id in new[] { "ch1", "misc", "ch5", "grind" }) m.StateOf(id).SteamUnlocked = true;
+        Assert.True(!GameLogic.BuildRows(m, Percentile.P50).Single(r => r.ApiName == "miss").ProbablyMissed, "missable gone past");
+        m.Tags["miss"].Group = "Chapter 2";
+        Assert.True(GameLogic.BuildRows(m, Percentile.P50).Single(r => r.ApiName == "miss").ProbablyMissed, "its chapter is over");
+    }
+
     public static void Session_SummaryTakesBackItsUnlocks()
     {
         var start = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);

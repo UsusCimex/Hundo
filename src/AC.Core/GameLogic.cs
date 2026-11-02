@@ -126,10 +126,12 @@ public static class GameLogic
 
     /// <summary>
     /// Locked achievements the player has gone past on the typical player's scale (<see cref="Progress.Behind"/>):
-    /// players usually unlock them before achievements this player already has.
+    /// players usually unlock them before achievements this player already has. None when achievements are marked by
+    /// time: each is marked when its time is up, so none holds the countdown of the next ones.
     /// </summary>
-    public static IReadOnlySet<string> Behind(GameData game, IReadOnlySet<string>? notYet = null) =>
-        AC.Core.Progress.Behind(game.Achievements
+    public static IReadOnlySet<string> Behind(GameData game, IReadOnlySet<string>? notYet = null) => game.MarkByTime
+        ? new HashSet<string>(StringComparer.Ordinal)
+        : AC.Core.Progress.Behind(game.Achievements
             .Select(a => (a.ApiName, At: EstimateOf(game, a.ApiName, Percentile.P50, out _), Done: IsDone(game, a.ApiName, notYet)))
             .Where(a => a.At.HasValue)
             .Select(a => (a.ApiName, a.At!.Value, a.Done)), Planner.MinMarginMinutes);
