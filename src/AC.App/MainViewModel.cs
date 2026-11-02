@@ -18,7 +18,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private GameData? _game;
     private StatsFileWatcher? _watcher;
     private DateTime _lastPoll = DateTime.MinValue;
-    private bool _refreshing;
+    /// <summary>The games whose status is being read: another game's read does not wait for theirs.</summary>
+    private readonly HashSet<uint> _reading = new();
     private readonly PlayWatch _play = new();
     private string? _tickError;
     private int _loadSeq;
@@ -638,11 +639,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private async Task RefreshStateAsync()
     {
-        if (_game is null || _refreshing) return;
-        _refreshing = true;
+        if (_game is not { } game || !_reading.Add(game.AppId)) return;
         try
         {
-            var game = _game;
             var fresh = await _svc.RefreshStateAutoAsync(game);
             _lastPoll = DateTime.Now;
             if (!ReferenceEquals(game, _game)) return;
@@ -654,7 +653,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         finally
         {
-            _refreshing = false;
+            _reading.Remove(game.AppId);
         }
     }
 
@@ -1348,8 +1347,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>With auto marks on, marks the achievement of the running open game whose time is up (<see cref="Plan.Due"/>).</summary>
     private void MarkDue()
     {
-        if (!ManualUnlocks || !_svc.Settings.AutoMark || IsBusy || _refreshing) return;
-        if (_game is not { } game || _plan is not { } plan) return;
+        if (!ManualUnlocks || !_svc.Settings.AutoMark || IsBusy) return;
+        if (_game is not { } game || _plan is not { } plan || _reading.Contains(game.AppId)) return;
         // Checked again here: the open game may have changed while the status was read.
         if (_play.Sessions.RunningFor(game.AppId, DateTimeOffset.Now) is not { } running || running < AutoMarkAfterRunning) return;
         if (plan.Due(PlayedSinceUnlock(game)) is not { } name) return;
