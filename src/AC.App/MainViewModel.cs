@@ -17,7 +17,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly DispatcherTimer _runningTimer;
     private GameData? _game;
     private StatsFileWatcher? _watcher;
-    private DateTime _lastPoll = DateTime.MinValue;
+    /// <summary>When the status was last read by itself, on a clock the system time does not move.</summary>
+    private readonly System.Diagnostics.Stopwatch _sincePoll = new();
     /// <summary>The games whose status is being read: another game's read does not wait for theirs.</summary>
     private readonly HashSet<uint> _reading = new();
     private readonly PlayWatch _play = new();
@@ -640,7 +641,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         try
         {
             var fresh = await _svc.RefreshStateAutoAsync(game);
-            _lastPoll = DateTime.Now;
+            _sincePoll.Restart();
             if (!ReferenceEquals(game, _game)) return;
             // Do not rebuild the table while the user types in a row, otherwise the input is lost.
             bool editing = Keyboard.FocusedElement is FrameworkElement { DataContext: AchievementRowViewModel };
@@ -1277,7 +1278,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         w.Changed += () => Application.Current?.Dispatcher.InvokeAsync(() =>
         {
             // Reading via the Steam client can rewrite the file itself - avoid a loop.
-            if (DateTime.Now - _lastPoll < TimeSpan.FromSeconds(10)) return;
+            if (_sincePoll.IsRunning && _sincePoll.Elapsed < TimeSpan.FromSeconds(10)) return;
             if (_svc.HasApiKey || _svc.Bridge.Exists) _ = PollAsync();
         });
         _watcher = w;
@@ -1310,9 +1311,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         bool openRunning = _game is { } open && running.Contains(open.AppId);
         bool canRefresh = _svc.HasApiKey || _svc.Bridge.Exists;
         if (openRunning && canRefresh && !IsBusy &&
-            DateTime.Now - _lastPoll > TimeSpan.FromSeconds(Math.Max(15, _svc.Settings.PollSeconds)))
+            (!_sincePoll.IsRunning || _sincePoll.Elapsed > TimeSpan.FromSeconds(Math.Max(15, _svc.Settings.PollSeconds))))
         {
-            _lastPoll = DateTime.Now;
+            _sincePoll.Restart();
             await PollAsync();
         }
         CountDown();
