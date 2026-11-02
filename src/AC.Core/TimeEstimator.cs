@@ -86,7 +86,8 @@ public static class TimeEstimator
         if (minutes is null) return "-";
         var m = minutes.Value;
         if (m < 1) return Loc.T("units.lessMinute");
-        if (m < 60) return Loc.T("units.minutes", m.ToString("0", CultureInfo.CurrentCulture));
+        // Rounded first: 59.7 minutes would read "60 min" instead of an hour.
+        if (Math.Round(m) < 60) return Loc.T("units.minutes", m.ToString("0", CultureInfo.CurrentCulture));
         var h = m / 60.0;
         return Loc.T("units.hours", h.ToString(h < 10 ? "0.#" : "0", CultureInfo.CurrentCulture));
     }

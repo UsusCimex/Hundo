@@ -196,6 +196,16 @@ static class Tests
         Assert.True(TimeEstimator.IsValidMinutes(1) && TimeEstimator.IsValidMinutes(TimeEstimator.MaxMinutes));
     }
 
+    public static void Estimator_FormatRoundsBeforeTheUnit()
+    {
+        Loc.SetLanguage("en");
+        string Text(double minutes) => TimeEstimator.Format(minutes);
+        Assert.Equal(Loc.T("units.minutes", "59"), Text(59.4));
+        Assert.Equal(Loc.T("units.hours", "1"), Text(59.7));
+        Assert.Equal(Loc.T("units.hours", "1"), Text(60));
+        Assert.Equal(Loc.T("units.lessMinute"), Text(0.4));
+    }
+
     public static void ManualEstimate_Wins()
     {
         var g = SampleGame();
