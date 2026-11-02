@@ -450,11 +450,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // A game opened before shows at once from its file: Steam's answers fill it in when they come, and what is
         // done to it meanwhile stays.
         var shown = _svc.Cached(appId);
-        if (shown is not null)
-        {
-            shown.CountManualMarks = ManualUnlocks;
-            SetGame(shown);
-        }
+        if (shown is not null) SetGame(shown);
         await Busy(Loc.T("status.loadingGame", name ?? appId.ToString()), async () =>
         {
             var report = await _svc.LoadGameAsync(appId, name, running: _play.Sessions.IsRunning(appId), current: shown);
@@ -985,11 +981,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public void SettingsChanged()
     {
-        if (_game != null)
-        {
-            _game.CountManualMarks = ManualUnlocks;
-            _svc.Relabel(_game);
-        }
+        if (_game != null) _svc.Relabel(_svc.WithMarkSettings(_game));
         if (!ManualUnlocks && _status == StatusFilter.NotCounted)
         {
             _status = StatusFilter.All;

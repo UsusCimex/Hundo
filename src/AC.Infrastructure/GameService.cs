@@ -95,7 +95,15 @@ public sealed class GameService
 
     // ---------- game ----------
 
-    public GameData? Cached(uint appId) => _store.LoadGame(appId);
+    public GameData? Cached(uint appId) => _store.LoadGame(appId) is { } game ? WithMarkSettings(game) : null;
+
+    /// <summary>The game as the settings count its marks (<see cref="GameData.CountManualMarks"/>, <see cref="GameData.MarkByTime"/>).</summary>
+    public GameData WithMarkSettings(GameData game)
+    {
+        game.CountManualMarks = Settings.ManualUnlocks;
+        game.MarkByTime = Settings.ManualUnlocks && Settings.AutoMark;
+        return game;
+    }
 
     /// <summary>
     /// Loads a game: schema (from the cache if fresh), global %, the local Steam schema,
@@ -107,8 +115,7 @@ public sealed class GameService
         GameData? current = null, CancellationToken ct = default)
     {
         var warnings = new List<string>();
-        var game = current ?? _store.LoadGame(appId) ?? new GameData { AppId = appId, Name = knownName ?? "" };
-        game.CountManualMarks = Settings.ManualUnlocks;
+        var game = WithMarkSettings(current ?? _store.LoadGame(appId) ?? new GameData { AppId = appId, Name = knownName ?? "" });
         if (!string.IsNullOrEmpty(knownName) && string.IsNullOrEmpty(game.Name)) game.Name = knownName;
 
         var lib = CachedLibrary().FirstOrDefault(g => g.AppId == appId);

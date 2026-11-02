@@ -1818,6 +1818,33 @@ static class Tests
         Assert.Equal(next, plan.Due(left));
     }
 
+    public static void Planner_MarkedByTimeWhenTheTimeIsUp()
+    {
+        // Mid-game a stretch shorter than the least margin is due when its time is up, and its card counts down to that
+        // moment instead of giving it the wide margin.
+        var g = SampleGame();
+        g.MarkByTime = true;
+        (g.StateOf("ch1").ManualDone, g.StateOf("ch1").ManualAt) = (true, DateTimeOffset.Now);
+        g.ManualEstimates["misc"] = 5;
+        var plan = Planner.Build(g, Percentile.P50);
+        double misc = plan.TimeLeft["misc"];
+        Assert.True(misc == 5 && plan.TimeLeft.Values.Min() == misc, $"misc is the nearest: {misc}");
+        Assert.Equal<string?>(null, plan.Due(misc - 1));
+        Assert.Equal("misc", plan.Due(misc));
+        Assert.Equal(new Countdown(1, false), plan.CountDown(misc - 1)["misc"]);
+        Assert.Equal(new Countdown(0, false), plan.CountDown(misc + 3)["misc"]);
+        g.MarkByTime = false;
+        Assert.True(Planner.Build(g, Percentile.P50).CountDown(misc + 3)["misc"].Late, "without marks by time it takes longer");
+
+        // At the start of a game the least margin stays: the rarity model puts the most common one at 0 minutes.
+        var fresh = SampleGame();
+        fresh.MarkByTime = true;
+        var start = Planner.Build(fresh, Percentile.P50);
+        Assert.Equal<string?>(null, start.Due(Planner.MinMarginMinutes - 1));
+        Assert.Equal("ch1", start.Due(Planner.MinMarginMinutes));
+        Assert.Equal(new Countdown(5, false), start.CountDown(Planner.MinMarginMinutes - 5)["ch1"]);
+    }
+
     public static void Session_SummaryTakesBackItsUnlocks()
     {
         var start = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);

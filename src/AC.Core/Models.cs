@@ -184,6 +184,13 @@ public sealed class GameData
     [JsonIgnore]
     public bool CountManualMarks { get; set; } = true;
 
+    /// <summary>
+    /// Achievements are marked when their time is up (auto marks, with manual marks on).
+    /// Set by the app from its settings, not stored in the game file.
+    /// </summary>
+    [JsonIgnore]
+    public bool MarkByTime { get; set; }
+
     /// <summary>Time to 100% the estimates actually use: set or derived.</summary>
     [JsonIgnore]
     public double? UsedCompletionMinutes =>

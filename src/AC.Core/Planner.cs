@@ -44,11 +44,24 @@ public sealed record Plan(
     /// <summary>The stretches of <see cref="Passed"/> ones: left for the end of the way to 100%.</summary>
     public double Deferred { get; init; }
 
+    /// <summary>Achievements are marked when their time is up (<see cref="GameData.MarkByTime"/>).</summary>
+    public bool ByTime { get; init; }
+
+    /// <summary>Something is done: the player is past the start of the game.</summary>
+    public bool Started { get; init; }
+
+    /// <summary>
+    /// The play since the last unlock after which an achievement with that time left is due by time: its time left, and
+    /// at the start of a game at least the least margin, since the rarity model puts the most common one at 0 minutes.
+    /// </summary>
+    private double DueAt(double left) => Started ? left : Math.Max(left, Planner.MinMarginMinutes);
+
     /// <summary>
     /// Time left to each locked achievement after <paramref name="played"/> minutes of play since the last unlock.
     /// The play goes only to the nearest one: hours without an unlock may be idle (AFK in a lobby), so the others
-    /// keep their gap to it until it is unlocked. Past its estimate the player takes longer than it assumes, and the
-    /// wide margin gives more time; past that too, there is no estimate. Passed ones have no time left to count.
+    /// keep their gap to it until it is unlocked. Marked by time, the nearest one counts down to its mark. Otherwise,
+    /// past its estimate the player takes longer than it assumes, and the wide margin gives more time; past that too,
+    /// there is no estimate. Passed ones have no time left to count.
     /// </summary>
     public Dictionary<string, Countdown> CountDown(double played)
     {
@@ -63,6 +76,11 @@ public sealed record Plan(
                 result[name] = new Countdown(left - credited, false);
                 continue;
             }
+            if (ByTime)
+            {
+                result[name] = new Countdown(Math.Max(0, DueAt(left) - played), false);
+                continue;
+            }
             double wide = Math.Max(left + Planner.MinMarginMinutes, WideTimeLeft.GetValueOrDefault(name, left));
             result[name] = played < left ? new Countdown(left - played, false)
                 : new Countdown(played < wide ? wide - played : null, true);
@@ -72,16 +90,15 @@ public sealed record Plan(
 
     /// <summary>
     /// The achievement whose time is up after that play: the nearest one ahead, once the play reaches its time left
-    /// and the least margin (the most common one is at the very start of the scale). Of several at the same point
-    /// the most common goes first; the others share the stretch and come later. One whose mark by time the user took
-    /// back is left to the user. null - none yet.
+    /// (<see cref="DueAt"/>). Of several at the same point the most common goes first; the others share the stretch
+    /// and come later. One whose mark by time the user took back is left to the user. null - none yet.
     /// </summary>
     public string? Due(double played)
     {
         var ahead = Ordered.Where(r => !r.AutoMarkUndone && TimeLeft.ContainsKey(r.ApiName)).ToList();
         if (ahead.Count == 0) return null;
         double nearest = ahead.Min(r => TimeLeft[r.ApiName]);
-        if (played < Math.Max(nearest, Planner.MinMarginMinutes)) return null;
+        if (played < DueAt(nearest)) return null;
         return ahead.Where(r => TimeLeft[r.ApiName] == nearest)
             .OrderByDescending(r => r.Def.Percent ?? -1)
             .Select(r => r.ApiName)
@@ -119,9 +136,9 @@ public static class Planner
     public const double MaxPace = 3;
 
     /// <summary>
-    /// The least margin: the wide margin past an estimate is at least this long, and nothing is due by time before this
-    /// much play. The rarity model puts the most common achievement at the very start, and neither the estimates nor
-    /// Steam's minutes are finer.
+    /// The least margin: the wide margin past an estimate is at least this long, and at the start of a game nothing is
+    /// due by time before this much play. The rarity model puts the most common achievement at 0 minutes, and neither
+    /// the estimates nor Steam's minutes are finer.
     /// </summary>
     public const double MinMarginMinutes = 15;
 
@@ -158,7 +175,10 @@ public static class Planner
         var passed = open.Where(r => r.Passed).Select(r => r.ApiName).ToHashSet(StringComparer.Ordinal);
         double? remaining = left.Count > 0 ? left.Values.Max() + deferred : open.Any(r => r.Passed && r.EstimateMinutes.HasValue) ? deferred : null;
         return new Plan(sections, remaining, unknown, pace)
-            { Total = rows.Count, TimeLeft = left, WideTimeLeft = wide, Passed = passed, Deferred = deferred };
+        {
+            Total = rows.Count, TimeLeft = left, WideTimeLeft = wide, Passed = passed, Deferred = deferred,
+            ByTime = game.MarkByTime, Started = rows.Any(r => r.IsDone),
+        };
     }
 
     /// <summary>
