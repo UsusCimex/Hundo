@@ -73,8 +73,9 @@ public sealed class TagPack
             }
             applied++;
         }
+        // Imported as the user's own: a weekly time from a site does not replace it, and the header names its source.
         if (CompletionMinutes is { } total && TimeEstimator.IsValidMinutes(total) && game.CompletionMinutes is null)
-            game.CompletionMinutes = total;
+            (game.CompletionMinutes, game.CompletionSource) = (total, "manual");
         return applied;
     }
 

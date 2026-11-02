@@ -622,8 +622,10 @@ static class Tests
 
         var g2 = SampleGame();
         g2.StateOf("miss").Note = "My own note";
+        g2.CompletionMinutes = null;
         var applied = TagPack.FromJson(json).ApplyTo(g2);
         Assert.Equal(4, applied);
+        Assert.True(g2 is { CompletionMinutes: 600, CompletionSource: "manual" }, $"time to 100% {g2.CompletionMinutes} from '{g2.CompletionSource}'");
         Assert.Equal("My own note\n\nTalk to the guard twice", g2.States["miss"].Note);
         TagPack.FromJson(json).ApplyTo(g2);
         Assert.Equal("My own note\n\nTalk to the guard twice", g2.States["miss"].Note); // not added twice
