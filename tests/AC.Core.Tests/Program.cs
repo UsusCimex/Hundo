@@ -1978,6 +1978,29 @@ static class Tests
         Assert.Equal(Math.Round(Planner.Build(g, Percentile.P50).RemainingMinutes!.Value - 20, 1), Math.Round(s.LeftAfter!.Value, 1));
     }
 
+    public static void Session_SummaryTakesBackWritesAndMarks()
+    {
+        var start = new DateTimeOffset(2026, 10, 1, 18, 0, 0, TimeSpan.Zero);
+        var session = new PlaySession(1, start, start.AddMinutes(90));
+        var g = SampleGame();
+        // Written to Steam by the app: unlocked and marked at once.
+        var written = g.StateOf("ch5");
+        (written.SteamUnlocked, written.SteamUnlockTime, written.ManualDone, written.ManualAt) = (true, start.AddMinutes(20), true, start.AddMinutes(20));
+        var marked = g.StateOf("misc");
+        (marked.ManualDone, marked.ManualAt) = (true, start.AddMinutes(70));
+
+        var s = SessionSummary.Of(g, session, Percentile.P50, session.End, []);
+        Assert.Equal("ch5,misc", string.Join(",", s.Unlocked.Select(a => a.ApiName)));
+        Assert.Equal(Planner.Build(SampleGame(), Percentile.P50).RemainingMinutes, s.LeftBefore);
+        Assert.Equal(Planner.Build(g, Percentile.P50).RemainingMinutes, s.LeftAfter);
+        Assert.True(s.LeftBefore > s.LeftAfter, $"before {s.LeftBefore}, after {s.LeftAfter}");
+        Assert.True(written is { SteamUnlocked: true, ManualDone: true } && marked.ManualDone, "the game is left as it was");
+
+        // Marks that do not count are not progress.
+        g.CountManualMarks = false;
+        Assert.Equal("ch5", string.Join(",", SessionSummary.Of(g, session, Percentile.P50, session.End, []).Unlocked.Select(a => a.ApiName)));
+    }
+
     public static void Summary_SortsByTimeLeft()
     {
         var s = AC.Infrastructure.GameSummary.Of(SampleGame());

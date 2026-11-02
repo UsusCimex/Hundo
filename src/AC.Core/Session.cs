@@ -91,7 +91,7 @@ public static class RunningGames
     }
 }
 
-/// <summary>What a session did: its unlocks in order and the time to 100% without and with them.</summary>
+/// <summary>What a session did: its unlocks and counted marks in order, and the time to 100% without and with them.</summary>
 public sealed record SessionSummary(
     TimeSpan Duration,
     IReadOnlyList<AchievementDef> Unlocked,
@@ -103,30 +103,42 @@ public sealed record SessionSummary(
     private static readonly TimeSpan ClockSlack = TimeSpan.FromMinutes(1);
 
     /// <summary>
-    /// The time to 100% counts down with the play since the last unlock (<see cref="Progress.MinutesSinceProgress"/>),
-    /// so before the session it is taken without its unlocks and without its play.
+    /// The time to 100% counts down with the play since the last unlock or mark (<see cref="Progress.MinutesSinceProgress"/>),
+    /// so before the session it is taken without its unlocks and marks and without its play. A write to Steam by the
+    /// app both unlocks and marks.
     /// </summary>
     /// <param name="played">The play the app saw (<see cref="SessionTracker.Played"/>).</param>
     public static SessionSummary Of(GameData game, PlaySession session, Percentile p, DateTimeOffset now, IReadOnlyList<PlaySession> played)
     {
-        var unlocked = game.Achievements
+        bool InSession(DateTimeOffset? t) => t is { } at && at >= session.Start - ClockSlack && at <= session.End + ClockSlack;
+        var done = game.Achievements
             .Select(a => (Def: a, State: game.States.GetValueOrDefault(a.ApiName)))
-            .Where(x => x.State is { SteamUnlocked: true, SteamUnlockTime: { } t } &&
-                t >= session.Start - ClockSlack && t <= session.End + ClockSlack)
-            .OrderBy(x => x.State!.SteamUnlockTime)
+            .Where(x => x.State is not null)
+            .Select(x => (x.Def, State: x.State!, Unlock: x.State!.SteamUnlocked && InSession(x.State.SteamUnlockTime),
+                Mark: game.CountManualMarks && x.State.ManualDone && InSession(x.State.ManualAt)))
+            .Where(x => x.Unlock || x.Mark)
+            .OrderBy(x => x.Unlock ? x.State.SteamUnlockTime : x.State.ManualAt)
             .ToList();
         var plan = Planner.Build(game, p);
         var after = plan.RemainingAfter(Progress.MinutesSinceProgress(game, now, played));
-        foreach (var x in unlocked) x.State!.SteamUnlocked = false;
+        void TakeBack(bool back)
+        {
+            foreach (var x in done)
+            {
+                if (x.Unlock) x.State.SteamUnlocked = !back;
+                if (x.Mark) x.State.ManualDone = !back;
+            }
+        }
+        TakeBack(true);
         Countdown? before;
         try
         {
-            // Without its unlocks the play since the previous one runs through the whole session.
+            // Without them the play since the previous one runs through the whole session.
             double sincePrevious = Progress.MinutesSinceProgress(game, now, played);
             before = Planner.Build(game, p).RemainingAfter(Math.Max(0, sincePrevious - (session.End - session.Start).TotalMinutes));
         }
-        finally { foreach (var x in unlocked) x.State!.SteamUnlocked = true; }
-        return new SessionSummary(session.End - session.Start, unlocked.Select(x => x.Def).ToList(),
+        finally { TakeBack(false); }
+        return new SessionSummary(session.End - session.Start, done.Select(x => x.Def).ToList(),
             before?.Minutes, after?.Minutes, plan.IsComplete);
     }
 }
