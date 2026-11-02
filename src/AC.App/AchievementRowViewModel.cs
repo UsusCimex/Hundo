@@ -175,7 +175,7 @@ public sealed class AchievementRowViewModel : ObservableObject
             if (_row.EstimateMinutes is null) return source;
             var hint = source + "\n" + EstimateBoth;
             return Left is not { } c || !c.Late && !c.Passed ? hint
-                : hint + "\n" + Loc.T(c.Passed ? _row.ProbablyMissed ? "estimate.missedTip" : "estimate.passedTip"
+                : hint + "\n" + Loc.T(c.Passed ? _row.ProbablyMissed ? "estimate.missedTip" : _row.AutoMarkUndone ? "estimate.undoneTip" : "estimate.passedTip"
                     : c.Minutes.HasValue ? "estimate.lateTip" : "estimate.overdueTip");
         }
     }

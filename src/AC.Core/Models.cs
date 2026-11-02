@@ -236,7 +236,9 @@ public sealed class GameData
 /// <summary>List row: schema + state + tags + estimate.</summary>
 /// <param name="Behind">Locked, and the player has gone past it by the order of unlocks (<see cref="GameLogic.Behind"/>).</param>
 /// <param name="OffOverlay">The user took it off the overlay (<see cref="AchievementState.OffOverlay"/>).</param>
-/// <param name="AutoMarkUndone">Locked, though the app once marked it by time: the user took that mark back.</param>
+/// <param name="AutoMarkUndone">
+/// Locked, though the app once marked it by time and still marks by time: the user took that mark back.
+/// </param>
 /// <param name="Progress">Locked and counting something: how far the count has come.</param>
 public sealed record AchievementRow(
     AchievementDef Def,
@@ -257,6 +259,6 @@ public sealed record AchievementRow(
     public string ApiName => Def.ApiName;
     public bool IsDone => Status != EffectiveStatus.Locked;
 
-    /// <summary>Not on the way to the next ones: gone past, or probably missed.</summary>
-    public bool Passed => !IsDone && (Behind || ProbablyMissed);
+    /// <summary>Not on the way to the next ones: gone past, probably missed, or its mark by time taken back.</summary>
+    public bool Passed => !IsDone && (Behind || ProbablyMissed || AutoMarkUndone);
 }

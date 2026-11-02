@@ -121,6 +121,7 @@
   "estimate.passed": "later",
   "estimate.passedTip": "Achievements players usually get after it are already yours: this one can wait",
   "estimate.missedTip": "Achievements players usually get after it are already yours: this one was probably missed",
+  "estimate.undoneTip": "You took its mark by time back: it is up to you now",
 
   "details.empty": "Select an achievement to set its type, group, estimate and note",
   "details.percent": "Players",

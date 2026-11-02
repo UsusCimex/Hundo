@@ -248,6 +248,7 @@ static class Tests
             g.StateOf("misc").AutoMarkedAt = DateTimeOffset.Now;
             Assert.True(svc.RevertInSteamAsync(g, "misc").GetAwaiter().GetResult().SteamWritten, "revoked");
             Assert.Equal(EffectiveStatus.Locked, GameLogic.StatusOf(store.LoadGame(1)!.States["misc"]));
+            g.MarkByTime = true;
             Assert.True(GameLogic.BuildRows(g, Percentile.P50).Single(r => r.ApiName == "misc").AutoMarkUndone,
                 "a mark by time taken back is not made again");
         }, helper: """{"ok":true,"changes":[{"api_name":"misc","ok":true}]}""");
@@ -1805,17 +1806,22 @@ static class Tests
         g.ManualEstimates["grind"] = g.Estimates["misc"].P50!.Value;
         Assert.Equal("misc", Planner.Build(g, Percentile.P50).Due(misc));
 
-        // A mark by time the user took back is left to them: the next one ahead is due after its own time.
+        // A mark by time the user took back is left to them: it leaves the way like one gone past, and the next one
+        // counts down from the last mark instead of keeping its gap to it.
         var back = SampleGame();
+        back.MarkByTime = true;
         back.StateOf("ch1").ManualDone = true;
         back.StateOf("ch1").ManualAt = DateTimeOffset.Now;
         back.StateOf("misc").AutoMarkedAt = DateTimeOffset.Now;
         plan = Planner.Build(back, Percentile.P50);
-        Assert.True(plan.Ordered.Single(r => r.ApiName == "misc").AutoMarkUndone, "misc was taken back");
-        var (next, left) = plan.TimeLeft.Where(kv => kv.Key != "misc").MinBy(kv => kv.Value);
-        Assert.True(left > misc, $"{next} comes after misc: {left}");
+        Assert.True(plan.Passed.Contains("misc") && !plan.TimeLeft.ContainsKey("misc"), "misc was taken back");
+        var (next, left) = plan.TimeLeft.MinBy(kv => kv.Value);
+        Assert.Equal(new Countdown(left - 10, false), plan.CountDown(10)[next]);
         Assert.Equal<string?>(null, plan.Due(left - 1));
         Assert.Equal(next, plan.Due(left));
+        // Marks by time turned off, it is an achievement like the others again.
+        back.MarkByTime = false;
+        Assert.True(!Planner.Build(back, Percentile.P50).Passed.Contains("misc"), "on the way without marks by time");
     }
 
     public static void Planner_MarkedByTimeWhenTheTimeIsUp()

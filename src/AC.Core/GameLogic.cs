@@ -89,7 +89,7 @@ public static class GameLogic
                 missed.Contains(def.ApiName),
                 gonePast,
                 s?.OffOverlay == true,
-                status == EffectiveStatus.Locked && s?.AutoMarkedAt is not null,
+                game.MarkByTime && status == EffectiveStatus.Locked && s?.AutoMarkedAt is not null,
                 status == EffectiveStatus.Locked && game.StatProgress.TryGetValue(def.ApiName, out var progress) ? progress : null));
         }
         return rows;
