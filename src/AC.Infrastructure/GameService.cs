@@ -629,11 +629,19 @@ public sealed class GameService
         return r;
     }
 
-    /// <summary>Locks in Steam an achievement the app unlocked (according to the log).</summary>
+    /// <summary>
+    /// Locks an achievement in Steam and takes back its mark: the app marks what it writes. A mark by time stays known,
+    /// so the achievement is not marked by time again.
+    /// </summary>
     public async Task<MarkReport> RevertInSteamAsync(GameData game, string apiName, CancellationToken ct = default)
     {
         if (ManualUnlocksOff() is { } off) return off;
         var r = await WriteToSteamAsync(game, new[] { apiName }, unlock: false, ct);
+        if (r.SteamWritten)
+        {
+            var s = game.StateOf(apiName);
+            (s.ManualDone, s.ManualAt) = (false, null);
+        }
         _store.SaveGame(game);
         return r;
     }

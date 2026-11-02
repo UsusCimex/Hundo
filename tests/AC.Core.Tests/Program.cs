@@ -236,6 +236,23 @@ static class Tests
         }, helper: """{"ok":true,"changes":[{"api_name":"misc","ok":true}]}""");
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Service_RevertTakesTheMarkBack()
+    {
+        WithService(new FakeHttp(_ => (HttpStatusCode.NotFound, "")), (svc, store) =>
+        {
+            svc.Settings.ManualUnlocks = true;
+            svc.Settings.WriteMode = AC.Infrastructure.WriteMode.MarkAndUnlock;
+            var g = SampleGame();
+            Assert.True(svc.SetManualDoneAsync(g, "misc", true).GetAwaiter().GetResult().SteamWritten, "written");
+            g.StateOf("misc").AutoMarkedAt = DateTimeOffset.Now;
+            Assert.True(svc.RevertInSteamAsync(g, "misc").GetAwaiter().GetResult().SteamWritten, "revoked");
+            Assert.Equal(EffectiveStatus.Locked, GameLogic.StatusOf(store.LoadGame(1)!.States["misc"]));
+            Assert.True(GameLogic.BuildRows(g, Percentile.P50).Single(r => r.ApiName == "misc").AutoMarkUndone,
+                "a mark by time taken back is not made again");
+        }, helper: """{"ok":true,"changes":[{"api_name":"misc","ok":true}]}""");
+    }
+
     public static void ManualMarks_IgnoredWhenOff()
     {
         var g = SampleGame();
