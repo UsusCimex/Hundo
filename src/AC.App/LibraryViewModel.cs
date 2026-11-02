@@ -110,6 +110,14 @@ public sealed class LibraryViewModel : ObservableObject
         if (ByTimeLeft || StartedOnly) View.Refresh();
     }
 
+    /// <summary>The open game's Steam playtime, read since the library was.</summary>
+    public void UpdatePlaytime(uint appId, int minutes)
+    {
+        if (Items.FirstOrDefault(i => i.AppId == appId) is not { } item || minutes <= item.Game.PlaytimeMinutes) return;
+        item.Game.PlaytimeMinutes = minutes;
+        item.RefreshTexts();
+    }
+
     public void RefreshTexts()
     {
         foreach (var item in Items) item.RefreshTexts();

@@ -1076,6 +1076,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UpdateOverlayLists(all);
 
         Library.UpdateSummary(_game.AppId, GameSummary.Of(_game, _played));
+        Library.UpdatePlaytime(_game.AppId, _game.PlaytimeMinutes);
         UpdateSession();
     }
 
