@@ -1812,6 +1812,9 @@ static class Tests
         var idle = plan.CountDown(5000);
         Assert.Equal(1, idle.Values.Count(c => c.Late));
         Assert.True(!idle["ch5"].Late && Math.Abs(idle["ch5"].Minutes!.Value - (ch5 - misc)) < 0.01, $"ch5 {idle["ch5"]}");
+        // Without time left, the nearest one still comes first.
+        Assert.Equal("misc", idle.Where(kv => kv.Value.OrderMinutes.HasValue).MinBy(kv => kv.Value.OrderMinutes)!.Key);
+        Assert.True(idle.Where(kv => kv.Value.Passed).All(kv => kv.Value.OrderMinutes is null), "passed ones have none");
 
         // The time to 100% is the longest countdown: idle hours take only the way to the nearest one from it.
         var total = plan.RemainingAfter(50)!.Value;

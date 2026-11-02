@@ -183,8 +183,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Time left to a locked achievement now; null - done or no estimate.</summary>
     internal Countdown? CountdownOf(string apiName) => _countdown.TryGetValue(apiName, out var c) ? c : null;
 
-    /// <summary>The hours the overlay and the plan groups go by; null - none, or longer than the wide margin.</summary>
+    /// <summary>The hours the plan groups show; null - none, or longer than the wide margin.</summary>
     private double? HoursOf(AchievementRow r) => ShowTimeLeft ? CountdownOf(r.ApiName)?.Minutes : r.EstimateMinutes;
+
+    /// <summary>The hours the overlay goes by (<see cref="Countdown.OrderMinutes"/>).</summary>
+    private double? OrderHoursOf(AchievementRow r) => ShowTimeLeft ? CountdownOf(r.ApiName)?.OrderMinutes : r.EstimateMinutes;
 
     private double PlayedSinceUnlock(GameData game)
     {
@@ -1025,7 +1028,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 Sort = _selectedSort.Value,
                 Descending = Descending,
                 TimeLeft = ShowTimeLeft
-                    ? _countdown.Where(kv => kv.Value.Minutes.HasValue).ToDictionary(kv => kv.Key, kv => kv.Value.Minutes!.Value)
+                    ? _countdown.Where(kv => kv.Value.OrderMinutes.HasValue).ToDictionary(kv => kv.Key, kv => kv.Value.OrderMinutes!.Value)
                     : null,
             };
             if (_kindFilter.Value is { } k) query.Kinds.Add(k);
@@ -1238,14 +1241,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OverlayMissable.Clear();
         foreach (var r in open.Where(r => r.Kind == AchievementKind.Missable)
                               .OrderBy(r => r.Passed)
-                              .ThenBy(r => HoursOf(r) ?? double.MaxValue).Take(6))
+                              .ThenBy(r => OrderHoursOf(r) ?? double.MaxValue).Take(6))
             OverlayMissable.Add(new AchievementRowViewModel(this, r));
 
         OverlayNearest.Clear();
         foreach (var r in open.Where(r => r.Kind != AchievementKind.Missable)
                               .OrderBy(r => r.Passed)
-                              .ThenBy(r => HoursOf(r) is null)
-                              .ThenBy(HoursOf)
+                              .ThenBy(r => OrderHoursOf(r) is null)
+                              .ThenBy(OrderHoursOf)
                               .ThenByDescending(r => r.Def.Percent ?? -1)
                               .Take(Math.Max(1, _svc.Settings.OverlayNearestCount)))
             OverlayNearest.Add(new AchievementRowViewModel(this, r));

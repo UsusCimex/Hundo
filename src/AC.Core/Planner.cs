@@ -120,7 +120,11 @@ public sealed record Plan(
 /// <param name="Minutes">null - longer than even the wide margin, or passed.</param>
 /// <param name="Late">Past the estimate: the time left is counted with the wide margin.</param>
 /// <param name="Passed">Gone past by the order of unlocks, or probably missed: nothing to count (<see cref="Plan.Passed"/>).</param>
-public readonly record struct Countdown(double? Minutes, bool Late, bool Passed = false);
+public readonly record struct Countdown(double? Minutes, bool Late, bool Passed = false)
+{
+    /// <summary>The minutes to order by: one past even its wide margin is still the nearest, due now.</summary>
+    public double? OrderMinutes => Minutes ?? (Late ? 0 : null);
+}
 
 /// <summary>
 /// Order planner.
