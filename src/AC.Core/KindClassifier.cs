@@ -61,31 +61,38 @@ public static class KindClassifier
     }
 
     /// <summary>
-    /// Where the achievement is earned: "Chapter 3", "Act 2", "Episode 1" or null.
+    /// Where the achievement is earned: "Chapter 3", "Act 2", "Episode 1", "Episode 2, chapter 3" or null.
     /// The description is checked before the name: it is more precise.
     /// </summary>
     public static string? Location(string? name, string? description)
     {
         foreach (var text in new[] { description, name })
-        {
-            if (string.IsNullOrEmpty(text)) continue;
-            var m = Place.Match(text);
-            if (!m.Success) continue;
-            var label = Series(m) switch { "chapter" => "group.chapter", "episode" => "group.episode", _ => "group.act" };
-            return Loc.T(label, m.Groups["n"].Value.ToUpperInvariant());
-        }
+            if (Find(text) is { } place) return place.Label;
         return null;
     }
 
-    /// <summary>The part of the game a text names, as a series ("chapter", "act", "episode") and a number.</summary>
-    public static (string Series, int Number)? PlaceIn(string? text)
+    /// <summary>The part of the game a text names, as a series ("chapter", "act", "episode chapter"...) and a number.</summary>
+    public static (string Series, int Number)? PlaceIn(string? text) => Find(text) is { } place ? (place.Series, place.Number) : null;
+
+    /// <summary>
+    /// The part of the game a text names. A chapter of an episode or act ("Chapter 2 of Episode 3") is a series of its
+    /// own, numbered within the whole: chapters of different episodes are not one series.
+    /// </summary>
+    private static (string Series, int Number, string Label)? Find(string? text)
     {
         if (string.IsNullOrEmpty(text)) return null;
-        var m = Place.Match(text);
-        if (!m.Success) return null;
-        var n = m.Groups["n"].Value;
-        return (Series(m), int.TryParse(n, out var arabic) ? arabic : Roman(n));
+        var parts = Place.Matches(text).Select(m => (Series: Series(m), N: m.Groups["n"].Value.ToUpperInvariant())).ToList();
+        if (parts.Count == 0) return null;
+        var chapter = parts.FirstOrDefault(p => p.Series == "chapter");
+        var whole = parts.FirstOrDefault(p => p.Series != "chapter");
+        if (chapter.N is not null && whole.N is not null)
+            return (whole.Series + " chapter", Number(whole.N) * 1000 + Number(chapter.N),
+                Loc.T(whole.Series == "episode" ? "group.episodeChapter" : "group.actChapter", whole.N, chapter.N));
+        var (series, n) = parts[0];
+        return (series, Number(n), Loc.T(series switch { "chapter" => "group.chapter", "episode" => "group.episode", _ => "group.act" }, n));
     }
+
+    private static int Number(string n) => int.TryParse(n, out var arabic) ? arabic : Roman(n);
 
     private static string Series(Match m)
     {

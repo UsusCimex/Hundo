@@ -314,6 +314,8 @@
   "group.chapter": "Chapter {0}",
   "group.act": "Act {0}",
   "group.episode": "Episode {0}",
+  "group.episodeChapter": "Episode {0}, chapter {1}",
+  "group.actChapter": "Act {0}, chapter {1}",
 
   "dialog.errorTitle": "Hundo - error",
   "dialog.manualUnlocks": "This adds a \"Done\" checkbox for achievements Steam did not count and lets the app write achievements to your Steam account.\n\nValve does not officially support such writes, and ranking sites (Steam Hunters, completionist.me) may flag a profile when many achievements unlock at once. Written achievements can be revoked, and every write is logged.\n\nTurn it on?",

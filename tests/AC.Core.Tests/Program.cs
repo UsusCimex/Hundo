@@ -137,6 +137,24 @@ static class Tests
         Assert.True(!new AchievementTag().GroupIsManual);
     }
 
+    public static void Classifier_ChapterOfAnEpisode()
+    {
+        Loc.SetLanguage("en");
+        Assert.Equal("Episode 3, chapter 2", KindClassifier.Location("Sisters", "Completed Chapter 2 of Episode 3."));
+        Loc.SetLanguage("ru");
+        Assert.Equal("Эпизод 3, глава 2", KindClassifier.Location("Sisters", "Completed Chapter 2 of Episode 3."));
+        Assert.Equal(KindClassifier.PlaceIn("Completed Chapter 2 of Episode 3."), KindClassifier.PlaceIn("Эпизод 3, глава 2"));
+
+        // Chapter 4 of the first episode done is not chapter 4 of the third one over.
+        var g = new GameData { AppId = 1 };
+        g.Achievements.Add(new AchievementDef { ApiName = "e1c4", Name = "Done", Description = "Complete Chapter 4 of Episode 1" });
+        g.Achievements.Add(new AchievementDef { ApiName = "e3c2", Name = "Mercy", Description = "Spare him in Chapter 2 of Episode 3" });
+        GameLogic.AutoClassify(g);
+        Assert.Equal(AchievementKind.Missable, g.Tags["e3c2"].Kind);
+        g.StateOf("e1c4").SteamUnlocked = true;
+        Assert.Equal(0, GameLogic.ProbablyMissed(g).Count);
+    }
+
     public static void Classifier_PlacesFollowLanguage()
     {
         Loc.SetLanguage("en");
