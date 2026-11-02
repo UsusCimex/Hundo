@@ -50,13 +50,25 @@ public partial class App : Application
         // Hardware rendering stops while the display is off; scripted screenshots switch to software rendering.
         if (Environment.GetEnvironmentVariable("AC_SOFTWARE_RENDERING") == "1")
             System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
-        var settings = new JsonStore().LoadSettings();
-        Loc.SetLanguage(settings.UiLanguage);
-        // Theme (built-in Fluent): set before any window so its dictionary is in the app resources.
-        ThemeManager.Apply(settings.Theme);
-        ImageCache.TrimInBackground();
         base.OnStartup(e);
-        var window = new MainWindow(inTray);
+        MainWindow window;
+        try
+        {
+            var settings = new JsonStore().LoadSettings();
+            Loc.SetLanguage(settings.UiLanguage);
+            // Theme (built-in Fluent): set before any window so its dictionary is in the app resources.
+            ThemeManager.Apply(settings.Theme);
+            ImageCache.TrimInBackground();
+            window = new MainWindow(inTray);
+        }
+        catch (Exception error)
+        {
+            // Without its window the app can do nothing, and its process would keep the next starts from opening one.
+            AppLog.Error("Start", error);
+            MessageBox.Show(error.Message, Loc.T("dialog.errorTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+            return;
+        }
         if (!inTray) window.Show();
     }
 
