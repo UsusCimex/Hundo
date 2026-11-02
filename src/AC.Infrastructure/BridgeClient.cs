@@ -53,14 +53,21 @@ public sealed class BridgeClient
     private static readonly SemaphoreSlim OneAtATime = new(1, 1);
 
     public string ExePath { get; }
+    private readonly bool _standIn;
 
+    /// <param name="exePath">
+    /// A stand-in that prints the helper's answer, for tests and checks of writes without Steam (also AC_STEAM_HELPER);
+    /// null - the app's own exe.
+    /// </param>
     public BridgeClient(string? exePath = null)
     {
+        exePath ??= Environment.GetEnvironmentVariable("AC_STEAM_HELPER") is { Length: > 0 } standIn ? standIn : null;
+        _standIn = exePath is not null;
         ExePath = exePath ?? Environment.ProcessPath ?? "";
     }
 
-    /// <summary>The helper can run; AC_NO_STEAM_CLIENT=1 turns it off (scripted screenshots must not touch Steam).</summary>
-    public bool Exists => File.Exists(ExePath) && Environment.GetEnvironmentVariable("AC_NO_STEAM_CLIENT") != "1";
+    /// <summary>The helper can run; AC_NO_STEAM_CLIENT=1 turns the real one off (scripted checks must not touch Steam).</summary>
+    public bool Exists => File.Exists(ExePath) && (_standIn || Environment.GetEnvironmentVariable("AC_NO_STEAM_CLIENT") != "1");
 
     public Task<BridgeResultDto> ReadAsync(uint appId, string language, CancellationToken ct = default) =>
         RunAsync(["read", appId.ToString(), "--lang", language], ct);

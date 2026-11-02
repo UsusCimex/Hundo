@@ -29,6 +29,7 @@ The script works on copies of the build and of the data folder, so the real fold
 | `AC_SOFTWARE_RENDERING=1` | software rendering: hardware rendering stops while the display is off |
 | `AC_UPDATE_URL` | another "latest release" JSON, for testing updates against a local server |
 | `AC_STEAM_API_URL` | another Steam Web API host, for checks against a local server: new unlocks without playing |
+| `AC_STEAM_HELPER` | a stand-in for the Steam client helper (a script that prints its JSON answer), run even with `AC_NO_STEAM_CLIENT=1`: checks of writes to Steam without Steam |
 | `AC_RUNNING_APPID` | the app takes these games (`480,2315050`, or a file with that, read on every look) for the running ones: checks of what happens during play, games starting and closing, without a game |
 
 ## Structure
