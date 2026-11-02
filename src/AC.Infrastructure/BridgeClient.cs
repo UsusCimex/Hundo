@@ -55,6 +55,9 @@ public sealed class BridgeClient
     public string ExePath { get; }
     private readonly bool _standIn;
 
+    /// <summary>How long the helper may take: connecting, reading or writing, and letting go of Steam.</summary>
+    internal TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(45);
+
     /// <param name="exePath">
     /// A stand-in that prints the helper's answer, for tests and checks of writes without Steam (also AC_STEAM_HELPER);
     /// null - the app's own exe.
@@ -98,25 +101,30 @@ public sealed class BridgeClient
             foreach (var a in (string[])[SteamClientCommand.Flag, .. args, "--ui", Loc.Language]) psi.ArgumentList.Add(a);
 
             using var p = Process.Start(psi) ?? throw new InvalidOperationException(Loc.T("error.bridgeStart"));
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(45));
-            var stdoutTask = p.StandardOutput.ReadToEndAsync(timeout.Token);
-            var stderrTask = p.StandardError.ReadToEndAsync(timeout.Token);
-            try
+            var stdoutTask = p.StandardOutput.ReadToEndAsync(CancellationToken.None);
+            var stderrTask = p.StandardError.ReadToEndAsync(CancellationToken.None);
+            bool exited = true;
+            using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
             {
-                await p.WaitForExitAsync(timeout.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                try { p.Kill(entireProcessTree: true); } catch { }
-                return new BridgeResultDto { Ok = false, Error = Loc.T("error.bridgeTimeout") };
+                timeout.CancelAfter(Timeout);
+                try
+                {
+                    await p.WaitForExitAsync(timeout.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    exited = false;
+                    try { p.Kill(entireProcessTree: true); } catch { }
+                }
             }
 
-            var stdout = (await stdoutTask).Trim();
+            // A helper that answered and then hung while letting go of Steam has done its work all the same.
+            var stdout = (await Printed(stdoutTask)).Trim();
             var line = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? "";
             if (line.Length == 0)
             {
-                var err = (await stderrTask).Trim();
+                if (!exited) return new BridgeResultDto { Ok = false, Error = Loc.T("error.bridgeTimeout") };
+                var err = (await Printed(stderrTask)).Trim();
                 return new BridgeResultDto { Ok = false, Error = err.Length > 0 ? Loc.T("error.bridgeEmptyWith", err) : Loc.T("error.bridgeEmpty") };
             }
             return JsonSerializer.Deserialize<BridgeResultDto>(line, Json)
@@ -129,6 +137,19 @@ public sealed class BridgeClient
         finally
         {
             OneAtATime.Release();
+        }
+    }
+
+    /// <summary>What the helper printed: its output ends with it, or soon after it is killed.</summary>
+    private static async Task<string> Printed(Task<string> output)
+    {
+        try
+        {
+            return await output.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (TimeoutException)
+        {
+            return "";
         }
     }
 }

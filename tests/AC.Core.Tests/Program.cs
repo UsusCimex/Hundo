@@ -1209,6 +1209,33 @@ static class Tests
         });
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Bridge_AnswerStandsWhenTheHelperHangsAfterIt()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ac-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(dir);
+            var helper = Path.Combine(dir, "helper.cmd");
+            // Answers, then hangs as when letting go of Steam takes long.
+            File.WriteAllText(helper, """
+                @echo {"ok":true,"changes":[{"api_name":"misc","ok":true}]}
+                @ping -n 8 127.0.0.1 >nul
+                """);
+            var bridge = new AC.Infrastructure.BridgeClient(helper) { Timeout = TimeSpan.FromSeconds(1) };
+            var r = bridge.UnlockAsync(1, ["misc"]).GetAwaiter().GetResult();
+            Assert.True(r.Ok && r.Changes?.Single().Ok == true, $"the answer counts: {r.Error}");
+
+            File.WriteAllText(helper, "@ping -n 8 127.0.0.1 >nul");
+            r = bridge.UnlockAsync(1, ["misc"]).GetAwaiter().GetResult();
+            Assert.Equal(Loc.T("error.bridgeTimeout"), r.Error);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
     public static void HangGuard_SkipsAHostThatDidNotAnswer()
     {
         var hanging = new HangingHttp();
