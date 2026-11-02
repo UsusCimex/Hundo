@@ -21,7 +21,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>The games whose status is being read: another game's read does not wait for theirs.</summary>
     private readonly HashSet<uint> _reading = new();
     private readonly PlayWatch _play = new();
-    private string? _tickError;
+    /// <summary>The last error of a step that runs by itself (<see cref="OnRepeatedError"/>).</summary>
+    private string? _repeatedError;
     private int _loadSeq;
     private int _busyCount;
     private string _completionFetchedText = "";
@@ -76,17 +77,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _runningTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         _runningTimer.Tick += async (_, _) =>
         {
-            // An error here would come back every tick: logged once and shown in the status line, not in a message
-            // box over the game.
             try
             {
                 await OnRunningTickAsync();
             }
             catch (Exception e)
             {
-                if (_tickError != e.Message) AppLog.Error("Running games", e);
-                _tickError = e.Message;
-                StatusMessage = Loc.T("status.error", e.Message);
+                OnRepeatedError("Running games", e);
             }
         };
 
@@ -1280,7 +1277,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             // Reading via the Steam client can rewrite the file itself - avoid a loop.
             if (DateTime.Now - _lastPoll < TimeSpan.FromSeconds(10)) return;
-            if (_svc.HasApiKey || _svc.Bridge.Exists) _ = SafeAsync(RefreshStateAsync);
+            if (_svc.HasApiKey || _svc.Bridge.Exists) _ = PollAsync();
         });
         _watcher = w;
     }
@@ -1315,7 +1312,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             DateTime.Now - _lastPoll > TimeSpan.FromSeconds(Math.Max(15, _svc.Settings.PollSeconds)))
         {
             _lastPoll = DateTime.Now;
-            await SafeAsync(RefreshStateAsync);
+            await PollAsync();
         }
         CountDown();
         MarkDue();
@@ -1440,6 +1437,30 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void OnError(Exception e)
     {
         AppLog.Error("Command", e);
+        StatusMessage = Loc.T("status.error", e.Message);
+    }
+
+    /// <summary>A status read nobody asked for: while the game runs, and when Steam writes its stats file.</summary>
+    private async Task PollAsync()
+    {
+        try
+        {
+            await RefreshStateAsync();
+        }
+        catch (Exception e)
+        {
+            OnRepeatedError("Status poll", e);
+        }
+    }
+
+    /// <summary>
+    /// An error of a step that runs by itself comes back every time (no network during play): logged once and shown in
+    /// the status line, not in a message box over the game.
+    /// </summary>
+    private void OnRepeatedError(string context, Exception e)
+    {
+        if (_repeatedError != e.Message) AppLog.Error(context, e);
+        _repeatedError = e.Message;
         StatusMessage = Loc.T("status.error", e.Message);
     }
 
