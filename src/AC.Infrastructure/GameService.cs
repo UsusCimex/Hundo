@@ -362,6 +362,7 @@ public sealed class GameService
         if (!r.Ok || r.Achievements is null) return (Array.Empty<string>(), r.Error ?? Loc.T("error.bridge"));
 
         var byName = game.Achievements.ToDictionary(a => a.ApiName, StringComparer.Ordinal);
+        bool added = false;
         foreach (var a in r.Achievements)
         {
             if (!byName.TryGetValue(a.ApiName, out var def))
@@ -369,6 +370,7 @@ public sealed class GameService
                 def = new AchievementDef { ApiName = a.ApiName };
                 game.Achievements.Add(def);
                 byName[a.ApiName] = def;
+                added = true;
             }
             if (!string.IsNullOrEmpty(a.Name)) def.Name = a.Name;
             if (!string.IsNullOrEmpty(a.Description)) def.Description = a.Description;
@@ -381,7 +383,9 @@ public sealed class GameService
             r.Achievements.Select(a => (a.ApiName, a.Achieved, a.UnlockTime > 0 ? DateTimeOffset.FromUnixTimeSeconds(a.UnlockTime) : (DateTimeOffset?)null)),
             DateTimeOffset.Now);
         game.PendingUnlocks.RemoveAll(n => game.StateOf(n).SteamUnlocked);
-        if (game.Achievements.Any(a => a.GlobalPercent is null)) await FetchPercentagesAsync(game, steam: true, ct);
+        // Only for achievements this read brought: the load asks for the others, and a poll during play would ask
+        // every time for a game Steam has no percentages of.
+        if (added) await FetchPercentagesAsync(game, steam: true, ct);
         GameLogic.AutoClassify(game);
         TimeEstimator.EstimateFromGlobalPercent(game);
         _store.SaveGame(game);

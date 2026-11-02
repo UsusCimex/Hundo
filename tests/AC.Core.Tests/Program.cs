@@ -1210,6 +1210,23 @@ static class Tests
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Service_ClientReadAsksForPercentagesOfNewAchievementsOnly()
+    {
+        var fake = new FakeHttp(url => url.Contains("GetGlobalAchievementPercentagesForApp")
+            ? (HttpStatusCode.OK, """{"achievementpercentages":{"achievements":[]}}""")
+            : (HttpStatusCode.NotFound, ""));
+        WithService(fake, (svc, store) =>
+        {
+            var g = SampleGame();
+            // Steam has no percentage for one, and the read brings one the game did not list.
+            g.Achievements.Single(a => a.ApiName == "misc").GlobalPercent = null;
+            for (int poll = 0; poll < 3; poll++) Assert.Equal(null, svc.RefreshViaBridgeAsync(g).GetAwaiter().GetResult().Error);
+            Assert.True(g.Achievements.Any(a => a.ApiName == "extra"), "the new one is listed");
+            Assert.Equal(1, fake.Urls.Count(u => u.Contains("GetGlobalAchievementPercentagesForApp")));
+        }, helper: """{"ok":true,"achievements":[{"api_name":"misc","achieved":false},{"api_name":"extra","achieved":false}]}""");
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public static void Bridge_AnswerStandsWhenTheHelperHangsAfterIt()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ac-test-" + Guid.NewGuid().ToString("N"));
