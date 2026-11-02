@@ -15,8 +15,9 @@ public static class KindClassifier
     private static readonly Regex Missable = new(
         @"\bmissable\b|point of no return|before (leaving|you leave|the end|finishing|completing)|" +
         @"without (ever )?(dying|being (seen|detected|hit))|in a single (run|playthrough|life)|" +
-        @"\bspare\b|\bsave (him|her|them)\b|" +
-        @"пропуст|безвозврат|до того как|прежде чем|ни разу не|не умира|не погиб|за одно прохождение|пощад",
+        @"\bspare (the|him|her|them|his|their|its|everyone|all)\b|\bsave (him|her|them)\b|" +
+        @"можно пропустить|легко пропустить|не пропусти|безвозврат|(до того,? как|прежде,? чем) (вы )?(покин|уйд|уход|законч|заверш|пройд)|ни разу не|не умира|не погиб|" +
+        @"за одно прохождение|\bпощад(и|ить|ил|ила|или|ите|ив)\b",
         Opt);
 
     // A number after "chapter", "act" or "episode" is a place, not a grind counter.

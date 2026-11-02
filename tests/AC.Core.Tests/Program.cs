@@ -81,6 +81,19 @@ static class Tests
         Assert.Equal(AchievementKind.Grind, KindClassifier.Classify("Hammer Time", "Earned the gold medal in all official Tanks Time Trials."));
     }
 
+    public static void Classifier_MissableWordsInOtherSenses()
+    {
+        // Sparing someone and points of no return are missable; spare parts, skipping turns and mercilessness are not.
+        Assert.Equal(AchievementKind.Missable, KindClassifier.Classify("Mercy", "Spare the guard"));
+        Assert.Equal(AchievementKind.Missable, KindClassifier.Classify("Милосердие", "Пощадите стражника"));
+        Assert.Equal(AchievementKind.Missable, KindClassifier.Classify("Сувенир", "Возьмите кубок до того, как покинете замок"));
+        Assert.Equal(AchievementKind.Other, KindClassifier.Classify("Reborn Hope", "Find a spare film roll."));
+        Assert.Equal(AchievementKind.Other, KindClassifier.Classify("Impeccable timing", "Complete a timer level with only a fraction of a second to spare"));
+        Assert.Equal(AchievementKind.Other, KindClassifier.Classify("Беспощадная", "Набрать 21 звезду в испытаниях, играя за Женщину-Кошку"));
+        Assert.Equal(AchievementKind.Other, KindClassifier.Classify("Эй, когда моя очередь?!", "Пропустите 15 ходов подряд."));
+        Assert.Equal(AchievementKind.Other, KindClassifier.Classify("Рейдер", "Убить первого охранника до того, как он поднимет тревогу."));
+    }
+
     public static void Classifier_RussianFormsAndPlaces()
     {
         Loc.SetLanguage("ru");
