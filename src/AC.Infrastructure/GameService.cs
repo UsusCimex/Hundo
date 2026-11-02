@@ -689,24 +689,38 @@ public sealed class GameService
 
         if (r.Changes is null)
         {
-            foreach (var n in names)
-                _store.AppendLog(new UnlockLogEntry { At = now, AppId = game.AppId, ApiName = n, Action = action, Ok = false, Error = r.Error });
+            Log(names.Select(n => new UnlockLogEntry { At = now, AppId = game.AppId, ApiName = n, Action = action, Ok = false, Error = r.Error }));
             return new MarkReport(false, r.Error ?? Loc.T("error.bridgeNoResult"));
         }
 
-        foreach (var c in r.Changes)
+        foreach (var c in r.Changes.Where(c => c.Ok))
         {
-            _store.AppendLog(new UnlockLogEntry { At = now, AppId = game.AppId, ApiName = c.ApiName, Action = action, Ok = c.Ok, Error = c.Error });
-            if (!c.Ok) continue;
             var s = game.StateOf(c.ApiName);
             s.SteamUnlocked = unlock;
             s.SteamUnlockTime = unlock ? now : null;
             s.WrittenAt = now;
             game.PendingUnlocks.Remove(c.ApiName);
         }
+        Log(r.Changes.Select(c => new UnlockLogEntry { At = now, AppId = game.AppId, ApiName = c.ApiName, Action = action, Ok = c.Ok, Error = c.Error }));
         var failed = r.Changes.Where(c => !c.Ok).ToList();
         return new MarkReport(r.Changes.Any(c => c.Ok),
             failed.Count == 0 ? null : string.Join("; ", failed.Select(f => $"{game.NameOf(f.ApiName)}: {f.Error}")));
+    }
+
+    /// <summary>The write log is the user's record: a line that cannot be written must not undo what Steam did.</summary>
+    private void Log(IEnumerable<UnlockLogEntry> entries)
+    {
+        foreach (var entry in entries)
+        {
+            try
+            {
+                _store.AppendLog(entry);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                AppLog.Info($"{entry.AppId}: write log, {entry.Action} {entry.ApiName} ok={entry.Ok}: {e.Message}");
+            }
+        }
     }
 
     // ---------- import/export ----------

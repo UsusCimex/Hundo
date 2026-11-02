@@ -56,7 +56,7 @@ public sealed class JsonStore
     public AppSettings LoadSettings()
     {
         if (!File.Exists(SettingsPath)) return new AppSettings { Format = AppSettings.CurrentFormat };
-        var json = File.ReadAllText(SettingsPath);
+        var json = Retry(() => File.ReadAllText(SettingsPath));
         AppSettings settings;
         bool changed = false;
         try
@@ -137,14 +137,22 @@ public sealed class JsonStore
             var all = Summaries();
             if (all.TryGetValue(game.AppId, out var old) && old.Equals(fresh)) return;
             all[game.AppId] = fresh;
-            Write(SummaryPath, all);
+            // A cache of the game files: a failed write waits for the next one and does not fail the game's save.
+            try
+            {
+                Write(SummaryPath, all);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                AppLog.Info($"Summary: {e.Message}");
+            }
         }
     }
 
     public void AppendLog(UnlockLogEntry entry)
     {
         var line = JsonSerializer.Serialize(entry, StoreJson.Compact);
-        lock (_logLock) File.AppendAllText(LogPath, line + Environment.NewLine);
+        lock (_logLock) Retry(() => File.AppendAllText(LogPath, line + Environment.NewLine));
     }
 
     public IReadOnlyList<UnlockLogEntry> ReadLog(uint? appId = null)
@@ -153,7 +161,7 @@ public sealed class JsonStore
         var list = new List<UnlockLogEntry>();
         lock (_logLock)
         {
-            foreach (var line in File.ReadLines(LogPath))
+            foreach (var line in Retry(() => File.ReadAllLines(LogPath)))
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 try
@@ -172,8 +180,11 @@ public sealed class JsonStore
         if (!File.Exists(path)) return null;
         try
         {
-            using var fs = File.OpenRead(path);
-            return JsonSerializer.Deserialize<T>(fs, StoreJson.Pretty);
+            return Retry(() =>
+            {
+                using var fs = File.OpenRead(path);
+                return JsonSerializer.Deserialize<T>(fs, StoreJson.Pretty);
+            });
         }
         catch (JsonException)
         {
@@ -181,6 +192,32 @@ public sealed class JsonStore
             return null;
         }
     }
+
+    /// <summary>
+    /// Another program may hold a file for a moment (an antivirus checks every file written): tried again for about
+    /// a second before the error goes up.
+    /// </summary>
+    private static T Retry<T>(Func<T> io)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return io();
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException &&
+                                      e is not (FileNotFoundException or DirectoryNotFoundException) && attempt < 8)
+            {
+                Thread.Sleep(25 * attempt);
+            }
+        }
+    }
+
+    private static void Retry(Action io) => Retry(() =>
+    {
+        io();
+        return true;
+    });
 
     /// <summary>A file that cannot be read is copied aside before it is written over, so manual marks are not lost.</summary>
     private static void KeepBroken(string path)
@@ -195,12 +232,13 @@ public sealed class JsonStore
     private static void Write<T>(string path, T value)
     {
         var tmp = path + ".tmp";
-        using (var fs = File.Create(tmp))
+        Retry(() =>
         {
+            using var fs = File.Create(tmp);
             JsonSerializer.Serialize(fs, value, StoreJson.Pretty);
             fs.Flush(flushToDisk: true);
-        }
-        File.Move(tmp, path, overwrite: true);
+        });
+        Retry(() => File.Move(tmp, path, overwrite: true));
     }
 }
 

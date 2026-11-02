@@ -2082,6 +2082,52 @@ static class Tests
         }
     }
 
+    public static void JsonStore_WaitsForAFileHeldForAMoment()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ac-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new AC.Infrastructure.JsonStore(dir);
+            store.SaveGame(SampleGame());
+            // As an antivirus holds a file it checks.
+            void HeldFor(int ms, Action io)
+            {
+                var held = new FileStream(store.GamePath(1), FileMode.Open, FileAccess.Read, FileShare.None);
+                var release = Task.Delay(ms).ContinueWith(_ => held.Dispose());
+                io();
+                release.Wait();
+            }
+            var g = SampleGame();
+            g.StateOf("miss").Note = "saved";
+            HeldFor(150, () => store.SaveGame(g));
+            GameData? back = null;
+            HeldFor(150, () => back = store.LoadGame(1));
+            Assert.Equal("saved", back!.States["miss"].Note);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Service_WriteStandsWhenItsLogCannotBeWritten()
+    {
+        WithService(new FakeHttp(_ => (HttpStatusCode.NotFound, "")), (svc, store) =>
+        {
+            svc.Settings.ManualUnlocks = true;
+            svc.Settings.WriteMode = AC.Infrastructure.WriteMode.MarkAndUnlock;
+            var g = SampleGame();
+            using (new FileStream(store.LogPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+            {
+                var r = svc.CompleteAsync(g, ["misc", "grind"]).GetAwaiter().GetResult();
+                Assert.True(r.SteamWritten, $"{r}");
+            }
+            Assert.True(g.States["misc"].SteamUnlocked && g.States["grind"].SteamUnlocked, "both written, as Steam answered");
+            Assert.True(store.LoadGame(1)!.States["grind"].SteamUnlocked, "and saved");
+        }, helper: """{"ok":true,"changes":[{"api_name":"misc","ok":true},{"api_name":"grind","ok":true}]}""");
+    }
+
     public static void JsonStore_RoundTripAndLog()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ac-test-" + Guid.NewGuid().ToString("N"));
