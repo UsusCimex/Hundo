@@ -679,6 +679,22 @@ static class Tests
         Assert.Equal("Пройдите главу 1", g.Achievements[0].Description); // an empty value from the Web API does not overwrite a known one
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void MergeLocalSchema_HiddenDescriptionsFollowTheLanguage()
+    {
+        var g = SampleGame();
+        var hidden = g.Achievements.Single(a => a.ApiName == "miss");
+        hidden.Hidden = true;
+        hidden.Description = "Пощади стражника";
+        var english = g.Achievements
+            .Select(a => new SchemaAchievement { ApiName = a.ApiName, Name = "English", Description = "English " + a.ApiName, Hidden = a.Hidden })
+            .ToList();
+        AC.Infrastructure.GameService.MergeLocalSchema(g, english, textsFromLocal: false);
+        Assert.Equal("English miss", hidden.Description);
+        Assert.Equal("Complete chapter 5", g.Achievements.Single(a => a.ApiName == "ch5").Description);
+        Assert.Equal("Finale", g.Achievements.Single(a => a.ApiName == "ch5").Name);
+    }
+
     public static void Loc_PluralCategories()
     {
         string Ru(long n) => Loc.Category("ru", n);

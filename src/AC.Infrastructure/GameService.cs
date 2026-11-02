@@ -777,7 +777,16 @@ public sealed class GameService
         var local = SteamLocal.ReadSchema(game.AppId, ContentLanguage);
         if (local is null || local.Count == 0) return;
         // Without a key the local schema is the only source of texts, so it also decides their language.
-        bool textsFromLocal = !HasApiKey;
+        MergeLocalSchema(game, local, textsFromLocal: !HasApiKey);
+        if (!HasApiKey) game.SchemaLanguage = ContentLanguage;
+    }
+
+    /// <summary>
+    /// The local schema, in the content language, over the list: it adds what the Web API lacks, and gives the
+    /// descriptions of hidden achievements, which the Web API never does.
+    /// </summary>
+    internal static void MergeLocalSchema(GameData game, IReadOnlyList<AC.Core.SteamFormats.SchemaAchievement> local, bool textsFromLocal)
+    {
         var byName = game.Achievements.ToDictionary(a => a.ApiName, StringComparer.Ordinal);
         foreach (var l in local)
         {
@@ -796,9 +805,8 @@ public sealed class GameService
                 byName[l.ApiName] = def;
             }
             if (textsFromLocal && l.Name.Length > 0) def.Name = l.Name;
-            if ((textsFromLocal && l.Description.Length > 0) || string.IsNullOrEmpty(def.Description)) def.Description = l.Description;
+            if (l.Description.Length > 0 && (textsFromLocal || def.Hidden) || string.IsNullOrEmpty(def.Description)) def.Description = l.Description;
             def.Protected = l.Protected;
         }
-        if (textsFromLocal) game.SchemaLanguage = ContentLanguage;
     }
 }
