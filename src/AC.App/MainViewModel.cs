@@ -26,10 +26,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string? _repeatedError;
     private int _loadSeq;
     private int _busyCount;
-    private string _completionFetchedText = "";
     /// <summary>
     /// The hour boxes as the app last filled them or the user applied them: a box that differs holds a draft, which a
-    /// load of the same game keeps.
+    /// load of the same game keeps. One that does not holds the kept value rounded, so applying it changes nothing.
     /// </summary>
     private (string Completion, string Override, string Offset) _hoursFilled = ("", "", "");
     /// <summary>Hidden achievements whose description the user revealed ("appid/apiName"). Kept until the app closes.</summary>
@@ -761,7 +760,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 return;
             }
             CompletionInput = (m.Value / 60).ToString("0.#", CultureInfo.CurrentCulture);
-            _completionFetchedText = CompletionInput;
             _hoursFilled.Completion = CompletionInput;
             Recompute(rebuildRows: false);
             StatusMessage = Loc.T("status.completionFetched");
@@ -771,7 +769,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void ApplyCompletion()
     {
         if (_game is null) return;
-        if (_game.CompletionMinutes is not null && _completionFetchedText.Length > 0 && CompletionInput == _completionFetchedText)
+        if (CompletionInput == _hoursFilled.Completion)
         {
             StatusMessage = Loc.T("status.completionSame");
             return;
@@ -801,6 +799,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             StatusMessage = Loc.T("status.playtimeBad");
             return;
         }
+        if (PlaytimeOverrideInput == _hoursFilled.Override) overrideMin = _game.PlaytimeOverrideMinutes;
+        if (PlaytimeOffsetInput == _hoursFilled.Offset) offsetMin = _game.PlaytimeOffsetMinutes;
         _svc.SetPlaytime(_game, overrideMin, offsetMin ?? 0);
         _hoursFilled.Override = PlaytimeOverrideInput;
         _hoursFilled.Offset = PlaytimeOffsetInput;
@@ -975,7 +975,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (!sameGame || PlaytimeOverrideInput == _hoursFilled.Override) PlaytimeOverrideInput = filled.Override;
         if (!sameGame || PlaytimeOffsetInput == _hoursFilled.Offset) PlaytimeOffsetInput = filled.Offset;
         _hoursFilled = filled;
-        _completionFetchedText = game.CompletionSource == "manual" ? "" : filled.Completion;
         Recompute(rebuildRows: true);
     }
 
