@@ -211,6 +211,10 @@ public sealed class GameData
         return s;
     }
 
+    /// <summary>The achievement's name; its API name when it has none.</summary>
+    public string NameOf(string apiName) =>
+        Achievements.FirstOrDefault(a => a.ApiName == apiName) is { Name.Length: > 0 } def ? def.Name : apiName;
+
     public AchievementTag TagOf(string apiName)
     {
         if (!Tags.TryGetValue(apiName, out var t))

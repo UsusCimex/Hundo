@@ -31,7 +31,7 @@ public sealed class OverlayViewModel : ObservableObject
     private bool _isInteractive;
     public bool IsInteractive { get => _isInteractive; set { if (Set(ref _isInteractive, value)) RefreshHints(); } }
 
-    /// <summary>"Done" and "To Steam" buttons on items: only in click mode and when marks are enabled.</summary>
+    /// <summary>The "Done" button on items: only in click mode and when marks are enabled.</summary>
     public bool ShowActions => IsInteractive && Main.ManualUnlocks;
 
     public string ModeHint

@@ -213,9 +213,6 @@ public sealed class AchievementRowViewModel : ObservableObject
         _row.Def.Description.Length > 0 ? _row.Def.Description
         : _row.Def.Hidden ? Loc.T("overlay.noDescription") : "";
 
-    /// <summary>Writable to Steam: writes are on in settings, the achievement is not unlocked or protected.</summary>
-    public bool CanWriteToSteam => _owner.ManualUnlocks && !IsUnlocked && !IsProtected;
-
     public string? Icon
     {
         get
@@ -278,7 +275,7 @@ public sealed class AchievementRowViewModel : ObservableObject
         _ => "",
     };
 
-    /// <summary>"Done but not counted" checkbox. Unavailable once unlocked in Steam.</summary>
+    /// <summary>The "Done" box (<see cref="MainViewModel.OnManualDoneChanged"/>). Unavailable once unlocked in Steam.</summary>
     public bool ManualDone
     {
         get => IsUnlocked || _manualDone;
@@ -354,7 +351,7 @@ public sealed class AchievementRowViewModel : ObservableObject
         nameof(Def), nameof(Status), nameof(IsDone), nameof(IsUnlocked), nameof(IsProtected), nameof(Name),
         nameof(Description), nameof(Icon), nameof(Percent), nameof(PercentValue),
         nameof(Estimate), nameof(StatusText), nameof(ManualDone), nameof(OverlayDescription),
-        nameof(CanWriteToSteam), nameof(IsSpoilerHidden), nameof(IsTipHidden), nameof(IsHidden), nameof(IsLocked), nameof(IsManualStatus),
+        nameof(IsSpoilerHidden), nameof(IsTipHidden), nameof(IsHidden), nameof(IsLocked), nameof(IsManualStatus),
         nameof(GroupIsAuto), nameof(IsPendingWrite), nameof(RarityText), nameof(RarityLevel), nameof(EstimateHint),
         nameof(EstimateBoth), nameof(IsLate), nameof(InOverlay), nameof(IsOffOverlay),
         nameof(HasProgress), nameof(ProgressValue), nameof(ProgressText),

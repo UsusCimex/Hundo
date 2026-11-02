@@ -372,15 +372,10 @@
                     <Border Grid.Row="1" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,6,0,0"
                             Visibility="{Binding DataContext.ManualUnlocks, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                         <StackPanel Style="{StaticResource CardActions}" Orientation="Horizontal">
-                            <CheckBox Content="{local:Tr card.done}" MinWidth="0" VerticalAlignment="Center" Margin="0,0,8,0"
+                            <CheckBox Content="{local:Tr card.done}" MinWidth="0" VerticalAlignment="Center"
                                       IsChecked="{Binding ManualDone, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                       Visibility="{Binding IsUnlocked, Converter={StaticResource InverseVis}}"
-                                      ToolTip="{local:Tr card.doneTip}" />
-                            <Button Content="{local:Tr card.toSteam}" Padding="10,3"
-                                    ToolTip="{local:Tr card.toSteamTip}"
-                                    Command="{Binding DataContext.UnlockInSteamCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                    CommandParameter="{Binding}"
-                                    Visibility="{Binding CanWriteToSteam, Converter={StaticResource BoolToVis}}" />
+                                      ToolTip="{Binding DataContext.DoneTip, RelativeSource={RelativeSource AncestorType=Window}}" />
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -837,8 +832,8 @@
                                 </ListBox.GroupStyle>
                                 <ListBox.ContextMenu>
                                     <ContextMenu>
-                                        <MenuItem Header="{local:Tr list.menuWrite}"
-                                                  Command="{Binding UnlockInSteamCommand}"
+                                        <MenuItem Header="{local:Tr list.menuDone}"
+                                                  Command="{Binding CompleteSelectedCommand}"
                                                   CommandParameter="{Binding PlacementTarget.SelectedItems, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                         <Separator />
                                         <MenuItem Header="{local:Tr list.menuRevert}"
@@ -987,19 +982,14 @@
                                               Visibility="{Binding IsLocked, Converter={StaticResource BoolToVis}}" />
 
                                     <StackPanel Visibility="{Binding DataContext.ManualUnlocks, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
-                                        <CheckBox Content="{local:Tr details.done}" Margin="0,12,0,8"
+                                        <CheckBox Content="{local:Tr card.done}" Margin="0,12,0,8"
                                                   IsChecked="{Binding ManualDone, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                  Visibility="{Binding IsUnlocked, Converter={StaticResource InverseVis}}" />
-                                        <WrapPanel>
-                                            <Button Content="{local:Tr details.write}" Margin="0,0,8,8" Padding="12,5"
-                                                    Command="{Binding DataContext.UnlockInSteamCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}"
-                                                    Visibility="{Binding CanWriteToSteam, Converter={StaticResource BoolToVis}}" />
-                                            <Button Content="{local:Tr details.revert}" Margin="0,0,8,8" Padding="12,5"
-                                                    Command="{Binding DataContext.RevertCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}"
-                                                    Visibility="{Binding IsUnlocked, Converter={StaticResource BoolToVis}}" />
-                                        </WrapPanel>
+                                                  Visibility="{Binding IsUnlocked, Converter={StaticResource InverseVis}}"
+                                                  ToolTip="{Binding DataContext.DoneTip, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                        <Button Content="{local:Tr details.revert}" Margin="0,12,0,8" Padding="12,5" HorizontalAlignment="Left"
+                                                Command="{Binding DataContext.RevertCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"
+                                                Visibility="{Binding IsUnlocked, Converter={StaticResource BoolToVis}}" />
                                     </StackPanel>
                                 </StackPanel>
                             </ScrollViewer>

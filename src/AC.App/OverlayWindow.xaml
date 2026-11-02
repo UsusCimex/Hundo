@@ -143,14 +143,9 @@
                     <StackPanel Orientation="Horizontal" Margin="0,4,0,0" HorizontalAlignment="Right"
                                 Visibility="{Binding DataContext.IsInteractive, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                         <Button Content="{local:Tr card.done}" Style="{StaticResource OvButton}"
-                                ToolTip="{local:Tr overlay.doneTip}"
+                                ToolTip="{Binding DataContext.Main.DoneTip, RelativeSource={RelativeSource AncestorType=Window}}"
                                 Visibility="{Binding DataContext.ShowActions, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"
                                 Command="{Binding DataContext.Main.OverlayMarkCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                CommandParameter="{Binding}" />
-                        <Button Content="{local:Tr card.toSteam}" Style="{StaticResource OvButton}"
-                                ToolTip="{local:Tr overlay.toSteamTip}"
-                                Visibility="{Binding DataContext.ShowActions, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"
-                                Command="{Binding DataContext.Main.OverlayUnlockCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding}" />
                         <Button Content="{local:Tr overlay.hide}" Style="{StaticResource OvButton}"
                                 ToolTip="{local:Tr overlay.hideTip}"

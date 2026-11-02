@@ -228,7 +228,7 @@ static class Tests
             svc.Settings.WriteMode = AC.Infrastructure.WriteMode.MarkAndUnlock;
             var g = SampleGame();
             g.StateFetchedAt = DateTimeOffset.Now.AddHours(-1);
-            var report = svc.SetManualDoneAsync(g, "misc", true).GetAwaiter().GetResult();
+            var report = svc.CompleteAsync(g, ["misc"]).GetAwaiter().GetResult();
             Assert.True(report.SteamWritten && g.StateOf("misc").SteamUnlocked, $"written: {report}");
             // The Web API does not show the write yet.
             Assert.Equal(0, svc.RefreshStateAsync(g).GetAwaiter().GetResult().Count);
@@ -244,13 +244,56 @@ static class Tests
             svc.Settings.ManualUnlocks = true;
             svc.Settings.WriteMode = AC.Infrastructure.WriteMode.MarkAndUnlock;
             var g = SampleGame();
-            Assert.True(svc.SetManualDoneAsync(g, "misc", true).GetAwaiter().GetResult().SteamWritten, "written");
+            Assert.True(svc.CompleteAsync(g, ["misc"]).GetAwaiter().GetResult().SteamWritten, "written");
             g.StateOf("misc").AutoMarkedAt = DateTimeOffset.Now;
             Assert.True(svc.RevertInSteamAsync(g, "misc").GetAwaiter().GetResult().SteamWritten, "revoked");
             Assert.Equal(EffectiveStatus.Locked, GameLogic.StatusOf(store.LoadGame(1)!.States["misc"]));
             Assert.True(GameLogic.BuildRows(g, Percentile.P50).Single(r => r.ApiName == "misc").AutoMarkUndone,
                 "a mark by time taken back is not made again");
         }, helper: """{"ok":true,"changes":[{"api_name":"misc","ok":true}]}""");
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Service_DoneFollowsTheWriteMode()
+    {
+        WithService(new FakeHttp(_ => (HttpStatusCode.NotFound, "")), (svc, store) =>
+        {
+            svc.Settings.ManualUnlocks = true;
+            static GameData Fresh()
+            {
+                var g = SampleGame();
+                g.Achievements.Single(a => a.ApiName == "ch5").Protected = true;
+                g.StateOf("ch1").SteamUnlocked = true;
+                return g;
+            }
+            string[] names = ["ch1", "ch5", "misc", "grind"];
+            string Statuses(GameData g) => string.Join(",", names.Select(n => GameLogic.StatusOf(g.States[n])));
+
+            // Only marks: Steam is not asked.
+            svc.Settings.WriteMode = AC.Infrastructure.WriteMode.MarkOnly;
+            var g = Fresh();
+            var r = svc.CompleteAsync(g, names).GetAwaiter().GetResult();
+            Assert.True(!r.SteamWritten && r.Error is null && g.PendingUnlocks.Count == 0, $"{r}");
+            Assert.Equal("Unlocked,ManualDone,ManualDone,ManualDone", Statuses(g));
+
+            // The queue takes what can be written; a protected one is only marked.
+            svc.Settings.WriteMode = AC.Infrastructure.WriteMode.Queue;
+            g = Fresh();
+            r = svc.CompleteAsync(g, names).GetAwaiter().GetResult();
+            Assert.Equal("misc,grind", string.Join(",", g.PendingUnlocks));
+            Assert.True(r.Error?.Contains("Finale") == true, $"the protected one is named: {r.Error}");
+            svc.Uncomplete(g, "misc");
+            Assert.True(GameLogic.StatusOf(g.States["misc"]) == EffectiveStatus.Locked && g.PendingUnlocks.SequenceEqual(["grind"]),
+                "taken back, and out of the queue");
+
+            // Written at once.
+            svc.Settings.WriteMode = AC.Infrastructure.WriteMode.MarkAndUnlock;
+            g = Fresh();
+            r = svc.CompleteAsync(g, names).GetAwaiter().GetResult();
+            Assert.True(r.SteamWritten, $"{r}");
+            Assert.Equal("Unlocked,ManualDone,Unlocked,Unlocked", Statuses(g));
+            Assert.Equal("misc,grind", string.Join(",", store.ReadLog(1).Select(e => e.ApiName)));
+        }, helper: """{"ok":true,"changes":[{"api_name":"misc","ok":true},{"api_name":"grind","ok":true}]}""");
     }
 
     public static void ManualMarks_IgnoredWhenOff()

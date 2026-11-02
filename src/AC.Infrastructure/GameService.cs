@@ -503,72 +503,47 @@ public sealed class GameService
         }
     }
 
-    /// <summary>
-    /// Writes to Steam right now, regardless of the mode in the settings.
-    /// Also sets the manual "done" mark. Protected and unlocked ones are skipped.
-    /// </summary>
-    public async Task<MarkReport> UnlockInSteamAsync(GameData game, IReadOnlyList<string> apiNames, CancellationToken ct = default)
-    {
-        if (ManualUnlocksOff() is { } off) return off;
-        var byName = game.Achievements.ToDictionary(a => a.ApiName, StringComparer.Ordinal);
-        var skipped = new List<string>();
-        var toWrite = new List<string>();
-        foreach (var n in apiNames.Distinct(StringComparer.Ordinal))
-        {
-            if (game.StateOf(n).SteamUnlocked) continue;
-            if (byName.TryGetValue(n, out var d) && d.Protected) { skipped.Add(d.Name.Length > 0 ? d.Name : n); continue; }
-            var s = game.StateOf(n);
-            if (!s.ManualDone) { s.ManualDone = true; s.ManualAt = DateTimeOffset.Now; }
-            toWrite.Add(n);
-        }
-        _store.SaveGame(game);
-        if (toWrite.Count == 0)
-            return new MarkReport(false, skipped.Count > 0 ? Loc.T("error.protected", string.Join(", ", skipped)) : Loc.T("error.nothingToWrite"));
-
-        var r = await WriteToSteamAsync(game, toWrite, unlock: true, ct);
-        _store.SaveGame(game);
-        if (skipped.Count > 0)
-            r = r with { Error = (r.Error is null ? "" : r.Error + "; ") + Loc.T("error.skippedProtected", string.Join(", ", skipped)) };
-        return r;
-    }
-
     // ---------- marks ----------
 
     /// <summary>
-    /// Manual "done but not counted" mark. What happens in Steam depends on Settings.WriteMode.
-    /// Removing the mark changes nothing in Steam (RevertInSteamAsync does that).
+    /// "Done": marks the achievements and does in Steam what the write mode says - nothing, write them now, or queue
+    /// them. Ones unlocked in Steam stay as they are; protected ones are only marked.
     /// </summary>
-    public async Task<MarkReport> SetManualDoneAsync(GameData game, string apiName, bool done, CancellationToken ct = default)
+    public async Task<MarkReport> CompleteAsync(GameData game, IReadOnlyCollection<string> apiNames, CancellationToken ct = default)
     {
         if (ManualUnlocksOff() is { } off) return off;
+        var now = DateTimeOffset.Now;
+        var defs = game.Achievements.ToDictionary(a => a.ApiName, StringComparer.Ordinal);
+        var toSteam = new List<string>();
+        var skipped = new List<string>();
+        foreach (var n in apiNames.Distinct(StringComparer.Ordinal))
+        {
+            var s = game.StateOf(n);
+            if (s.SteamUnlocked) continue;
+            if (!s.ManualDone) (s.ManualDone, s.ManualAt) = (true, now);
+            if (Settings.WriteMode == WriteMode.MarkOnly || !defs.TryGetValue(n, out var def)) continue;
+            if (def.Protected) skipped.Add(game.NameOf(n));
+            else toSteam.Add(n);
+        }
+        // Saved before Steam is asked: the marks are not lost if the helper fails.
+        _store.SaveGame(game);
+
+        var report = new MarkReport(false, null);
+        if (Settings.WriteMode == WriteMode.Queue) game.PendingUnlocks.AddRange(toSteam.Except(game.PendingUnlocks));
+        else if (toSteam.Count > 0) report = await WriteToSteamAsync(game, toSteam, unlock: true, ct);
+        _store.SaveGame(game);
+        if (skipped.Count == 0) return report;
+        var protectedNote = Loc.T("error.protected", string.Join(", ", skipped));
+        return report with { Error = report.Error is null ? protectedNote : report.Error + "; " + protectedNote };
+    }
+
+    /// <summary>Takes a "Done" mark back, and the achievement out of the queue. Steam is not asked (<see cref="RevertInSteamAsync"/> is).</summary>
+    public void Uncomplete(GameData game, string apiName)
+    {
         var s = game.StateOf(apiName);
-        s.ManualDone = done;
-        s.ManualAt = done ? DateTimeOffset.Now : null;
-        if (!done) game.PendingUnlocks.Remove(apiName);
-
-        // Save the mark before calling Steam so it is not lost if the helper crashes.
+        (s.ManualDone, s.ManualAt) = (false, null);
+        game.PendingUnlocks.Remove(apiName);
         _store.SaveGame(game);
-
-        MarkReport report = new(false, null);
-        var def = game.Achievements.FirstOrDefault(a => a.ApiName == apiName);
-        if (done && !s.SteamUnlocked && def is { Protected: false })
-        {
-            switch (Settings.WriteMode)
-            {
-                case WriteMode.MarkAndUnlock:
-                    report = await WriteToSteamAsync(game, new[] { apiName }, unlock: true, ct);
-                    break;
-                case WriteMode.Queue:
-                    if (!game.PendingUnlocks.Contains(apiName)) game.PendingUnlocks.Add(apiName);
-                    break;
-            }
-        }
-        else if (done && def is { Protected: true } && Settings.WriteMode != WriteMode.MarkOnly)
-        {
-            report = new MarkReport(false, Loc.T("error.protectedOne"));
-        }
-        _store.SaveGame(game);
-        return report;
     }
 
     public void SetNote(GameData game, string apiName, string note)
@@ -703,7 +678,7 @@ public sealed class GameService
         }
         var failed = r.Changes.Where(c => !c.Ok).ToList();
         return new MarkReport(r.Changes.Any(c => c.Ok),
-            failed.Count == 0 ? null : string.Join("; ", failed.Select(f => $"{f.ApiName}: {f.Error}")));
+            failed.Count == 0 ? null : string.Join("; ", failed.Select(f => $"{game.NameOf(f.ApiName)}: {f.Error}")));
     }
 
     // ---------- import/export ----------

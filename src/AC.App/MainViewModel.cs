@@ -61,9 +61,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ExportTagsCommand = new RelayCommand(ExportTags, () => _game != null);
         ImportTagsCommand = new RelayCommand(ImportTags, () => _game != null);
         RevertCommand = new AsyncCommand(p => RevertAsync(p as AchievementRowViewModel), OnError, p => ManualUnlocks && p is AchievementRowViewModel { IsUnlocked: true });
-        UnlockInSteamCommand = new AsyncCommand(p => UnlockInSteamAsync(p, fromOverlay: false), OnError, p => _game != null && RowsFrom(p).Any(r => r.CanWriteToSteam));
-        OverlayUnlockCommand = new AsyncCommand(p => UnlockInSteamAsync(p, fromOverlay: true), OnError, p => _game != null && RowsFrom(p).Any(r => r.CanWriteToSteam));
-        OverlayMarkCommand = new RelayCommand(p => { if (p is AchievementRowViewModel r) MarkDoneFromOverlay(r); }, _ => ManualUnlocks);
+        CompleteSelectedCommand = new AsyncCommand(CompleteSelectedAsync, OnError, p => _game != null && ManualUnlocks && RowsFrom(p).Any(r => !r.IsUnlocked));
+        OverlayMarkCommand = new AsyncCommand(p => p is AchievementRowViewModel { IsUnlocked: false } r ? CompleteAsync([r.ApiName], inGame: true) : Task.CompletedTask,
+            OnError, _ => ManualUnlocks);
         OverlayHideCommand = new RelayCommand(p => { if (p is AchievementRowViewModel r) r.InOverlay = false; });
         DownloadUpdateCommand = new RelayCommand(() => OpenUrl(_update?.DownloadUrl), () => _update != null);
         UpdateNotesCommand = new RelayCommand(() => OpenUrl(_update?.PageUrl), () => _update != null);
@@ -196,6 +196,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public bool HasApiKey => _svc.HasApiKey;
     /// <summary>Manual marks and Steam writes are enabled in settings.</summary>
     public bool ManualUnlocks => _svc.Settings.ManualUnlocks;
+
+    /// <summary>What "Done" does, by the write mode.</summary>
+    public string DoneTip => Loc.T(_svc.Settings.WriteMode switch
+    {
+        WriteMode.MarkAndUnlock => "done.write",
+        WriteMode.Queue => "done.queue",
+        _ => "done.mark",
+    });
 
     // ---------- current game data ----------
 
@@ -364,11 +372,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public RelayCommand ExportTagsCommand { get; }
     public RelayCommand ImportTagsCommand { get; }
     public AsyncCommand RevertCommand { get; }
-    /// <summary>Write to Steam now. Parameter: a row or a list of selected rows.</summary>
-    public AsyncCommand UnlockInSteamCommand { get; }
-    /// <summary>Same from the overlay: no dialogs, they may hide behind the game.</summary>
-    public AsyncCommand OverlayUnlockCommand { get; }
-    public RelayCommand OverlayMarkCommand { get; }
+    /// <summary>"Done" for the rows selected in the list. Parameter: the list of selected rows.</summary>
+    public AsyncCommand CompleteSelectedCommand { get; }
+    /// <summary>"Done" from the overlay. Parameter: the row.</summary>
+    public AsyncCommand OverlayMarkCommand { get; }
     public RelayCommand OverlayHideCommand { get; }
     public RelayCommand DownloadUpdateCommand { get; }
     public RelayCommand UpdateNotesCommand { get; }
@@ -689,31 +696,47 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _ => Array.Empty<AchievementRowViewModel>(),
     };
 
-    private async Task UnlockInSteamAsync(object? p, bool fromOverlay)
+    /// <summary>"Done" for the rows selected in the list; writing several to Steam at once is asked first.</summary>
+    private async Task CompleteSelectedAsync(object? p)
     {
-        if (_game is null) return;
-        var rows = RowsFrom(p).Where(r => r.CanWriteToSteam).ToList();
-        if (rows.Count == 0) return;
-
-        if (!fromOverlay && rows.Count > 1 &&
-            MessageBox.Show(Loc.Plural("dialog.writeSelected", rows.Count), "Hundo",
+        var names = RowsFrom(p).Where(r => !r.IsUnlocked).Select(r => r.ApiName).ToList();
+        if (names.Count > 1 && _svc.Settings.WriteMode == WriteMode.MarkAndUnlock &&
+            MessageBox.Show(Loc.Plural("dialog.writeSelected", names.Count), "Hundo",
                 MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK)
             return;
+        await CompleteAsync(names);
+    }
 
-        var game = _game;
-        await Busy(Loc.T("status.writing"), async () =>
+    /// <summary>
+    /// "Done" for achievements of the open game, wherever it is pressed and by time: marked, and in Steam what the write
+    /// mode says (<see cref="GameService.CompleteAsync"/>).
+    /// </summary>
+    /// <param name="inGame">From the overlay or by time: the player is in the game, so the result shows there too.</param>
+    /// <param name="byTime">An auto mark.</param>
+    private async Task CompleteAsync(IReadOnlyList<string> apiNames, bool inGame = false, bool byTime = false)
+    {
+        if (_game is not { } game || apiNames.Count == 0) return;
+        if (_svc.Settings.WriteMode == WriteMode.MarkAndUnlock) StatusMessage = Loc.T("status.writing");
+        MarkReport r;
+        try
         {
-            var r = await _svc.UnlockInSteamAsync(game, rows.Select(x => x.ApiName).ToList());
-            if (!ReferenceEquals(game, _game)) return;
-            Recompute(rebuildRows: false);
-            var names = string.Join(", ", rows.Select(x => x.Name));
-            if (r.SteamWritten)
-            {
-                StatusMessage = Loc.T("status.written", names) + (r.Error is null ? "" : " | " + r.Error);
-                Toast?.Invoke(Loc.T("status.writtenToast", names));
-            }
-            else StatusMessage = Loc.T("status.notWritten", r.Error ?? Loc.T("status.unknownError"));
-        });
+            r = await _svc.CompleteAsync(game, apiNames);
+        }
+        finally
+        {
+            if (ReferenceEquals(game, _game)) Recompute(rebuildRows: false);
+        }
+        if (!ReferenceEquals(game, _game)) return;
+        var text = Loc.T((r.SteamWritten, byTime) switch
+        {
+            (true, true) => "status.autoWritten",
+            (true, false) => "status.written",
+            (false, true) => "status.autoMarked",
+            _ => "status.marked",
+        }, string.Join(", ", apiNames.Select(game.NameOf)));
+        if (r.Error is { } error) text += " | " + (r.SteamWritten ? error : Loc.T("status.notWritten", error));
+        StatusMessage = text;
+        if (inGame) Toast?.Invoke(text);
     }
 
     private async Task RevertAsync(AchievementRowViewModel? row)
@@ -807,22 +830,25 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     // ---------- row edits ----------
 
-    internal async void OnManualDoneChanged(AchievementRowViewModel row, bool done)
+    /// <summary>The "Done" box of a row: ticked, <see cref="CompleteAsync"/>; cleared, the mark is taken back.</summary>
+    internal async void OnManualDoneChanged(AchievementRowViewModel row, bool done) => await SafeAsync(async () =>
     {
-        if (_game is null) return;
+        if (done)
+        {
+            await CompleteAsync([row.ApiName]);
+            return;
+        }
+        if (_game is not { } game) return;
         try
         {
-            var report = await _svc.SetManualDoneAsync(_game, row.ApiName, done);
-            if (report.Error != null) StatusMessage = report.Error;
-            else if (report.SteamWritten) StatusMessage = Loc.T("status.written", row.Name);
-            else StatusMessage = Loc.T(done ? "status.marked" : "status.unmarked", row.Name);
+            _svc.Uncomplete(game, row.ApiName);
         }
-        catch (Exception e)
+        finally
         {
-            OnError(e);
+            Recompute(rebuildRows: false);
         }
-        Recompute(rebuildRows: false);
-    }
+        StatusMessage = Loc.T("status.unmarked", row.Name);
+    });
 
     internal void OnKindChanged(AchievementRowViewModel row, AchievementKind kind)
     {
@@ -856,13 +882,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (_game is null) return;
         _svc.SetManualEstimate(_game, row.ApiName, minutes);
         Recompute(rebuildRows: false);
-    }
-
-    /// <summary>Mark from overlay.</summary>
-    public void MarkDoneFromOverlay(AchievementRowViewModel row)
-    {
-        if (!ManualUnlocks || row.IsDone) return;
-        row.ManualDone = true;
     }
 
     // ---------- export / import ----------
@@ -978,6 +997,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         OnPropertyChanged(nameof(HideSpoilers));
         OnPropertyChanged(nameof(ManualUnlocks));
+        OnPropertyChanged(nameof(DoneTip));
         OnPropertyChanged(nameof(QueueVisible));
         OnPropertyChanged(nameof(HasApiKey));
         OnPropertyChanged(nameof(QueueText));
@@ -1338,13 +1358,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // Checked again here: the open game may have changed while the status was read.
         if (_play.Sessions.RunningFor(game.AppId, DateTimeOffset.Now) is not { } running || running < AutoMarkAfterRunning) return;
         if (plan.Due(PlayedSinceUnlock(game)) is not { } name) return;
-        // The plan is rebuilt only after the mark reaches Steam: until then it still names the one being marked.
+        // The plan is rebuilt once the mark is made, after a write to Steam: until then it still names this one.
         var state = game.StateOf(name);
-        if (state.AutoMarkedAt is not null || _rows.FirstOrDefault(r => r.ApiName == name) is not { IsDone: false } row) return;
+        if (state.AutoMarkedAt is not null || GameLogic.StatusOf(state, game.CountManualMarks) != EffectiveStatus.Locked) return;
         state.AutoMarkedAt = DateTimeOffset.Now;
-        var vm = new AchievementRowViewModel(this, row);
-        Toast?.Invoke(Loc.T("status.autoMarked", vm.Name));
-        vm.ManualDone = true;
+        _ = SafeAsync(() => CompleteAsync([name], inGame: true, byTime: true));
     }
 
     /// <summary>Steam counts a session's playtime a little after it ends; the new point goes to the playtime history.</summary>
@@ -1394,11 +1412,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void AnnounceNew(IReadOnlyList<string> apiNames)
     {
         if (_game is not { } game || apiNames.Count == 0) return;
-        string NameOf(string apiName) => game.Achievements.FirstOrDefault(a => a.ApiName == apiName)?.Name ?? apiName;
-        var text = Loc.T("status.newlyUnlocked", string.Join(", ", apiNames.Select(NameOf)));
+        var text = Loc.T("status.newlyUnlocked", string.Join(", ", apiNames.Select(game.NameOf)));
         // Told at once, the player can still load a save before the game overwrites it.
         if (GameLogic.LeftBehind(game, apiNames) is { Count: > 0 } missed)
-            text += ". " + Loc.T("status.leftBehind", string.Join(", ", missed.Select(NameOf)));
+            text += ". " + Loc.T("status.leftBehind", string.Join(", ", missed.Select(game.NameOf)));
         StatusMessage = text;
         Toast?.Invoke(text);
     }
