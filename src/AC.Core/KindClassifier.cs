@@ -6,7 +6,7 @@ namespace AC.Core;
 /// Rough kind heuristic from the name and description (English and Russian).
 /// The goal is a reasonable start; the user fixes the rest by hand.
 /// Check order matters: missable beats story, grind beats "other".
-/// Russian verbs are matched in all common forms: Steam uses the imperative, infinitive and past tense.
+/// Verbs are matched in all common forms: Steam uses the imperative, infinitive and past tense.
 /// </summary>
 public static class KindClassifier
 {
@@ -21,7 +21,9 @@ public static class KindClassifier
 
     // A number after "chapter", "act" or "episode" is a place, not a grind counter.
     private static readonly Regex Grind = new(
-        @"\b(collect|find|kill|defeat|destroy|earn|gather|craft|win|complete|reach|get|open|catch)\b[^.]{0,40}" +
+        @"\b(collect(s|ed|ing)?|find(s|ing)?|found|kill(s|ed|ing)?|defeat(s|ed|ing)?|destroy(s|ed|ing)?|earn(s|ed|ing)?|" +
+        @"gather(s|ed|ing)?|craft(s|ed|ing)?|win(s|ning)?|won|complet(e|es|ed|ing)|reach(es|ed|ing)?|get(s|ting)?|got|" +
+        @"open(s|ed|ing)?|catch(es|ing)?|caught)\b[^.]{0,40}" +
         @"\b((?<!\b(chapter|act|episode)\s+)\d{2,}[\d,\s]*|all|every)\b|" +
         @"\b\d{3,}\b|\ball (the )?(collectibles|items|weapons|cards|trophies|achievements|secrets|upgrades)\b|" +
         @"\bmax(imum|ed)? level\b|\blevel \d{2,}\b|" +
@@ -33,7 +35,8 @@ public static class KindClassifier
     // Only "complete/finish a story part" and words that mean story by themselves.
     // A mere chapter mention ("heart in chapter 3") is a place: it sets the group, not the kind.
     private static readonly Regex Story = new(
-        @"\b(complete|finish|beat|clear)\b[^.]{0,30}\b(chapter|act|prologue|epilogue|mission|the game|the story|campaign|level \d|episode|part)\b|" +
+        @"\b(complet(e|es|ed|ing)|finish(es|ed|ing)?|beat(s|en|ing)?|clear(s|ed|ing)?)\b[^.]{0,30}" +
+        @"\b(chapter|act|prologue|epilogue|mission|the game|the story|campaign|level \d|episode|part)\b|" +
         @"\bstory\b|\bending\b|\bfinal boss\b|\bprologue\b|\bepilogue\b|" +
         @"(пройд|пройти|прош[её]л|прошли|заверш|законч)[^.]{0,30}(глав|акт|пролог|эпилог|мисси|игру|сюжет|кампани|эпизод)|" +
         @"пролог|эпилог|концовк|финальн[а-я]* босс|\bсюжет",

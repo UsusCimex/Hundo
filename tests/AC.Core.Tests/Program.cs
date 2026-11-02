@@ -71,6 +71,16 @@ static class Tests
         Assert.Equal(AchievementKind.Unknown, KindClassifier.Classify("", ""));
     }
 
+    public static void Classifier_EnglishPastTense()
+    {
+        // Steam texts often say what was done: the same kinds as the imperative.
+        Assert.Equal(AchievementKind.Story, KindClassifier.Classify("Chapter 8", "Completed Chapter 8"));
+        Assert.Equal(AchievementKind.Story, KindClassifier.Classify("Speedrunner", "You finished Chapter One in 10 minutes!"));
+        Assert.Equal(AchievementKind.Grind, KindClassifier.Classify("Ticket Master", "Found all 24 tickets."));
+        Assert.Equal(AchievementKind.Grind, KindClassifier.Classify("Handgun Fanatic", "Collected all handguns models."));
+        Assert.Equal(AchievementKind.Grind, KindClassifier.Classify("Hammer Time", "Earned the gold medal in all official Tanks Time Trials."));
+    }
+
     public static void Classifier_RussianFormsAndPlaces()
     {
         Loc.SetLanguage("ru");
