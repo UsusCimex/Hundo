@@ -80,7 +80,7 @@ The app was first called Achievement Companion: the data folder, the DPAPI entro
 | Schema | `GetSchemaForGame` (key) and the local `appcache/stats/UserGameStatsSchema_<appid>.bin`: the Web API gives no descriptions of hidden ones, the local schema does; it also has the "protected" flag |
 | Global % | `GetGlobalAchievementPercentagesForApp` (no key), else `steamhunters.com/api/apps/<appid>/achievements` |
 | Time to 100% | `steamhunters.com/api/apps/<appid>`: `medianCompletionTime`, minutes, asked once a week |
-| Status | `GetPlayerAchievements` (key and public "Game details") or the Steam client |
+| Status | `GetPlayerAchievements` (key and public "Game details") or the Steam client; the Web API shows a write of the app late, so the write stands against its reads until it does |
 | Library | `GetOwnedGames` (key); fresh playtime of one game - the same call with `appids_filter` |
 | Own sample | authors of the game's reviews (`IUserReviewsService/GetAppReviews`, no key) and their `GetPlayerAchievements`; collected on its own only when nobody has percentages, at most once a week |
 | Guide quotes | `IPublishedFileService/QueryFiles` (key): guides tagged Achievements and the language, up to 5 by title, until every achievement has words; `GetSubSectionData`: sections in BBCode; pictures from its tags and links, `[previewimg]` ones from the uploads (`return_previews`), without icons by size; authors from `GetPlayerSummaries`. The content language first, then English with English names from the local schema or `GetSchemaForGame` |

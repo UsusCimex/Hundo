@@ -11,21 +11,34 @@ public static class GameLogic
         return EffectiveStatus.Locked;
     }
 
+    /// <summary>How long the Web API may take to show what the app wrote to Steam: past that, it is taken as it is.</summary>
+    public static readonly TimeSpan WriteShownWithin = TimeSpan.FromDays(1);
+
     /// <summary>
     /// Applies fresh status from Steam. Manual marks and notes are kept:
     /// once the achievement unlocks in Steam, its status becomes "unlocked" by itself.
     /// Returns the api names unlocked since the last sync; none at the first one, which finds what came before.
     /// </summary>
+    /// <param name="lagging">
+    /// The status comes from the Web API, which shows a write a while after the Steam client takes it: until it shows
+    /// what the app wrote (<see cref="AchievementState.WrittenAt"/>), the write stands.
+    /// </param>
     public static IReadOnlyList<string> ApplySteamState(
         GameData game,
         IEnumerable<(string ApiName, bool Unlocked, DateTimeOffset? UnlockTime)> steam,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        bool lagging = false)
     {
         bool first = game.StateFetchedAt is null;
         var newlyUnlocked = new List<string>();
         foreach (var (apiName, unlocked, time) in steam)
         {
             var s = game.StateOf(apiName);
+            if (lagging && s.WrittenAt is { } written)
+            {
+                if (unlocked != s.SteamUnlocked && now - written < WriteShownWithin) continue;
+                s.WrittenAt = null;
+            }
             if (unlocked && !s.SteamUnlocked && !first) newlyUnlocked.Add(apiName);
             s.SteamUnlocked = unlocked;
             s.SteamUnlockTime = unlocked ? time : null;

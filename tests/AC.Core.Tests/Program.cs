@@ -186,6 +186,56 @@ static class Tests
         Assert.Equal(0, fresh.Count);
     }
 
+    public static void Status_WebApiLagsBehindAWrite()
+    {
+        var g = SampleGame();
+        var now = new DateTimeOffset(2026, 11, 2, 20, 0, 0, TimeSpan.Zero);
+        GameLogic.ApplySteamState(g, [("misc", false, null), ("ch5", true, now.AddDays(-1))], now.AddHours(-1));
+        // The app wrote misc to Steam: the Web API shows it a while later, and a read until then leaves it.
+        var misc = g.StateOf("misc");
+        (misc.SteamUnlocked, misc.SteamUnlockTime, misc.WrittenAt) = (true, now, now);
+        Assert.Equal(0, GameLogic.ApplySteamState(g, [("misc", false, null)], now.AddMinutes(1), lagging: true).Count);
+        Assert.True(misc.SteamUnlocked && misc.WrittenAt == now, "a Web API read a minute after the write leaves it");
+        // Shown, it is no new unlock and takes Steam's time; from then on the Web API is taken as it is.
+        var t = now.AddSeconds(2);
+        Assert.Equal(0, GameLogic.ApplySteamState(g, [("misc", true, t)], now.AddMinutes(3), lagging: true).Count);
+        Assert.True(misc.SteamUnlockTime == t && misc.WrittenAt is null, $"shown: {misc.SteamUnlockTime} {misc.WrittenAt}");
+        GameLogic.ApplySteamState(g, [("misc", false, null)], now.AddMinutes(5), lagging: true);
+        Assert.True(!misc.SteamUnlocked, "a relock made elsewhere shows");
+
+        // A relock the app wrote is not taken for a new unlock while the Web API still has the unlock.
+        var ch5 = g.StateOf("ch5");
+        (ch5.SteamUnlocked, ch5.SteamUnlockTime, ch5.WrittenAt) = (false, null, now);
+        Assert.Equal(0, GameLogic.ApplySteamState(g, [("ch5", true, now.AddDays(-1))], now.AddMinutes(1), lagging: true).Count);
+        Assert.True(!ch5.SteamUnlocked, "the relock stands");
+        // The Steam client shows what it has at once, and a write the Web API never shows is given up after a while.
+        GameLogic.ApplySteamState(g, [("ch5", true, now.AddDays(-1))], now.AddMinutes(1));
+        Assert.True(ch5.SteamUnlocked, "the Steam client is taken as it is");
+        (ch5.SteamUnlocked, ch5.WrittenAt) = (false, now);
+        GameLogic.ApplySteamState(g, [("ch5", true, now.AddDays(-1))], now + GameLogic.WriteShownWithin, lagging: true);
+        Assert.True(ch5.SteamUnlocked, "given up after a while");
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Service_WebApiReadKeepsAWrite()
+    {
+        var fake = new FakeHttp(url => url.Contains("GetPlayerAchievements")
+            ? (HttpStatusCode.OK, """{"playerstats":{"success":true,"achievements":[{"apiname":"misc","achieved":0,"unlocktime":0}]}}""")
+            : (HttpStatusCode.NotFound, ""));
+        WithService(fake, (svc, store) =>
+        {
+            svc.Settings.ManualUnlocks = true;
+            svc.Settings.WriteMode = AC.Infrastructure.WriteMode.MarkAndUnlock;
+            var g = SampleGame();
+            g.StateFetchedAt = DateTimeOffset.Now.AddHours(-1);
+            var report = svc.SetManualDoneAsync(g, "misc", true).GetAwaiter().GetResult();
+            Assert.True(report.SteamWritten && g.StateOf("misc").SteamUnlocked, $"written: {report}");
+            // The Web API does not show the write yet.
+            Assert.Equal(0, svc.RefreshStateAsync(g).GetAwaiter().GetResult().Count);
+            Assert.True(g.StateOf("misc").SteamUnlocked, "the write stands against the Web API");
+        }, helper: """{"ok":true,"changes":[{"api_name":"misc","ok":true}]}""");
+    }
+
     public static void ManualMarks_IgnoredWhenOff()
     {
         var g = SampleGame();
@@ -1052,18 +1102,28 @@ static class Tests
         """;
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    static void WithService(HttpMessageHandler fake, Action<AC.Infrastructure.GameService, AC.Infrastructure.JsonStore> body)
+    /// <param name="helper">The line a stand-in for the Steam client helper answers every call with; null - no helper.</param>
+    static void WithService(HttpMessageHandler fake, Action<AC.Infrastructure.GameService, AC.Infrastructure.JsonStore> body,
+        string? helper = null)
     {
         var dir = Path.Combine(Path.GetTempPath(), "ac-test-" + Guid.NewGuid().ToString("N"));
         try
         {
             var store = new AC.Infrastructure.JsonStore(dir);
             // A known account, so the service does not read this machine's Steam login file: antivirus software
-            // takes reading it next to DPAPI for a password stealer and freezes the process.
-            store.SaveSettings(new AC.Infrastructure.AppSettings { SteamId64 = 76561197960287930 });
+            // takes reading it next to DPAPI for a password stealer and freezes the process. The one signed in to
+            // Steam, if any: the helper writes for no other.
+            uint signedIn = AC.Infrastructure.SteamLocal.SignedInAccountId();
+            store.SaveSettings(new AC.Infrastructure.AppSettings
+            {
+                SteamId64 = signedIn != 0 ? AC.Infrastructure.SteamLocal.SteamId64Base + signedIn : 76561197960287930,
+            });
+            // Never the real helper: Steam would show the user in the game, and a write would reach their account.
+            var helperPath = Path.Combine(dir, "helper.cmd");
+            if (helper is not null) File.WriteAllText(helperPath, "@echo " + helper);
             var http = new HttpClient(fake);
             var svc = new AC.Infrastructure.GameService(store, new AC.Infrastructure.SteamWebApi(http),
-                new AC.Infrastructure.BridgeClient(), new AC.Infrastructure.SteamHunters(http));
+                new AC.Infrastructure.BridgeClient(helperPath), new AC.Infrastructure.SteamHunters(http));
             svc.ApiKey = "00000000000000000000000000000000";
             body(svc, store);
         }

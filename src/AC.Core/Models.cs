@@ -57,6 +57,8 @@ public sealed class AchievementState
 {
     public bool SteamUnlocked { get; set; }
     public DateTimeOffset? SteamUnlockTime { get; set; }
+    /// <summary>When the app last wrote it to Steam, until the Web API shows that (<see cref="GameLogic.ApplySteamState"/>).</summary>
+    public DateTimeOffset? WrittenAt { get; set; }
     public bool ManualDone { get; set; }
     public DateTimeOffset? ManualAt { get; set; }
     /// <summary>When the app marked it by time (auto mark): one the user unmarks is not marked by time again.</summary>

@@ -209,7 +209,7 @@ public sealed class GameService
     {
         RequireKey();
         var list = await _api.GetPlayerAchievementsAsync(ApiKey, Settings.SteamId64, game.AppId, ct);
-        var fresh = GameLogic.ApplySteamState(game, list.Select(a => (a.ApiName, a.Achieved, a.UnlockTime)), DateTimeOffset.Now);
+        var fresh = GameLogic.ApplySteamState(game, list.Select(a => (a.ApiName, a.Achieved, a.UnlockTime)), DateTimeOffset.Now, lagging: true);
         game.PendingUnlocks.RemoveAll(n => game.StateOf(n).SteamUnlocked);
         _store.SaveGame(game);
         return fresh;
@@ -690,6 +690,7 @@ public sealed class GameService
             var s = game.StateOf(c.ApiName);
             s.SteamUnlocked = unlock;
             s.SteamUnlockTime = unlock ? now : null;
+            s.WrittenAt = now;
             game.PendingUnlocks.Remove(c.ApiName);
         }
         var failed = r.Changes.Where(c => !c.Ok).ToList();
