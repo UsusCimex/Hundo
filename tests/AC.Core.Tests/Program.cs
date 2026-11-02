@@ -1172,6 +1172,27 @@ static class Tests
         });
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Service_GameOpenedAgainWhileItLoads()
+    {
+        AC.Infrastructure.GameService? service = null;
+        var fake = new FakeHttp(url =>
+        {
+            if (!url.Contains("GetSchemaForGame")) return (HttpStatusCode.NotFound, "");
+            // While Steam answers, the user goes to another game and back, and writes a note.
+            if (service?.Cached(1) is { } again) service.SetNote(again, "miss", "typed meanwhile");
+            return (HttpStatusCode.OK, Schema);
+        });
+        WithService(fake, (svc, store) =>
+        {
+            store.SaveGame(SampleGame());
+            var shown = svc.Cached(1);
+            service = svc;
+            svc.LoadGameAsync(1, forceSchema: true, current: shown).GetAwaiter().GetResult();
+            Assert.Equal("typed meanwhile", store.LoadGame(1)!.States["miss"].Note);
+        });
+    }
+
     public static void HangGuard_SkipsAHostThatDidNotAnswer()
     {
         var hanging = new HangingHttp();

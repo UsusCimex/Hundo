@@ -95,7 +95,28 @@ public sealed class GameService
 
     // ---------- game ----------
 
-    public GameData? Cached(uint appId) => _store.LoadGame(appId) is { } game ? WithMarkSettings(game) : null;
+    public GameData? Cached(uint appId) => Loaded(appId) is { } game ? WithMarkSettings(game) : null;
+
+    /// <summary>
+    /// The games in use, one copy each: a second copy read from the file while a load still fills the first would lose
+    /// what is done to it when that load saves the first.
+    /// </summary>
+    private readonly Dictionary<uint, WeakReference<GameData>> _inUse = new();
+
+    private GameData? Loaded(uint appId)
+    {
+        lock (_inUse)
+        {
+            if (_inUse.TryGetValue(appId, out var kept) && kept.TryGetTarget(out var game)) return game;
+            return _store.LoadGame(appId) is { } read ? InUse(read) : null;
+        }
+    }
+
+    private GameData InUse(GameData game)
+    {
+        lock (_inUse) _inUse[game.AppId] = new WeakReference<GameData>(game);
+        return game;
+    }
 
     /// <summary>The game as the settings count its marks (<see cref="GameData.CountManualMarks"/>, <see cref="GameData.MarkByTime"/>).</summary>
     public GameData WithMarkSettings(GameData game)
@@ -115,7 +136,7 @@ public sealed class GameService
         GameData? current = null, CancellationToken ct = default)
     {
         var warnings = new List<string>();
-        var game = WithMarkSettings(current ?? _store.LoadGame(appId) ?? new GameData { AppId = appId, Name = knownName ?? "" });
+        var game = WithMarkSettings(current ?? Loaded(appId) ?? InUse(new GameData { AppId = appId, Name = knownName ?? "" }));
         if (!string.IsNullOrEmpty(knownName) && string.IsNullOrEmpty(game.Name)) game.Name = knownName;
 
         var lib = CachedLibrary().FirstOrDefault(g => g.AppId == appId);
