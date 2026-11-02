@@ -353,7 +353,7 @@ public sealed class AchievementRowViewModel : ObservableObject
         nameof(Estimate), nameof(StatusText), nameof(ManualDone), nameof(OverlayDescription),
         nameof(IsSpoilerHidden), nameof(IsTipHidden), nameof(IsHidden), nameof(IsLocked), nameof(IsManualStatus),
         nameof(GroupIsAuto), nameof(IsPendingWrite), nameof(RarityText), nameof(RarityLevel), nameof(EstimateHint),
-        nameof(EstimateBoth), nameof(IsLate), nameof(InOverlay), nameof(IsOffOverlay),
+        nameof(EstimateBoth), nameof(IsLate), nameof(InOverlay), nameof(IsOffOverlay), nameof(IsProbablyMissed),
         nameof(HasProgress), nameof(ProgressValue), nameof(ProgressText),
     };
 
