@@ -180,6 +180,16 @@ static class Tests
         Assert.True(g.Estimates["miss"].P90 > g.Estimates["miss"].P50, "P90 above P50");
     }
 
+    public static void Estimator_OnePercentageForAll()
+    {
+        var g = new GameData { AppId = 1, CompletionMinutes = 300 };
+        g.Achievements.Add(new AchievementDef { ApiName = "a", GlobalPercent = 12 });
+        g.Achievements.Add(new AchievementDef { ApiName = "b", GlobalPercent = 12 });
+        TimeEstimator.EstimateFromGlobalPercent(g);
+        Assert.Equal(300.0, g.Estimates["a"].P50!.Value);
+        Assert.Equal(300.0, Planner.Build(g, Percentile.P50).RemainingMinutes);
+    }
+
     public static void Estimator_NoCompletionTime_NoEstimates()
     {
         var g = SampleGame();

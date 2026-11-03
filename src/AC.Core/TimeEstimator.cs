@@ -54,7 +54,8 @@ public static class TimeEstimator
         {
             // A measurement from the player sample is more accurate than the model: keep it.
             if (game.Estimates.TryGetValue(a.ApiName, out var measured) && measured.Source == SampleStats.SourceName) continue;
-            double share = span > 1e-9 ? Math.Log(max / a.Percent!.Value) / span : 0.5;
+            // One percentage for all: the ones who got any got all, and the last of them comes at 100%.
+            double share = span > 1e-9 ? Math.Log(max / a.Percent!.Value) / span : 1;
             double p50 = Math.Round(total.Value * share, 1);
             game.Estimates[a.ApiName] = new TimeEstimate
             {
