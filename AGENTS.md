@@ -21,6 +21,7 @@ The script works on copies of the build and of the data folder, so the real fold
 - Do not change the user's real data folder (`%LocalAppData%\AchievementCompanion`): run the app with `AC_DATA_DIR` pointing to a copy.
 - Do not run the Steam client mode (`Hundo.exe --steam-client ...`): while it runs, friends see the user "in game", and `unlock` writes achievements to their account. Check with `AC_NO_STEAM_CLIENT=1`, as `tools/screenshots.ps1` does.
 - Do not open windows over a game: if `HKCU\Software\Valve\Steam\RunningAppID` is not 0, start nothing.
+- Do not change "Start with Windows" in a copy: it writes the user's own `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (value `Hundo`), pointing at the copy.
 
 | Variable | Effect |
 | --- | --- |
