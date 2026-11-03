@@ -13,16 +13,16 @@ public sealed class OverlayViewModel : ObservableObject
     public OverlayViewModel(MainViewModel main)
     {
         Main = main;
-        main.OverlayMissable.CollectionChanged += OnMissableChanged;
+        main.Overlay.Missable.CollectionChanged += OnMissableChanged;
     }
 
     private void OnMissableChanged(object? sender, NotifyCollectionChangedEventArgs e) => OnPropertyChanged(nameof(HasMissable));
 
-    public void Detach() => Main.OverlayMissable.CollectionChanged -= OnMissableChanged;
+    public void Detach() => Main.Overlay.Missable.CollectionChanged -= OnMissableChanged;
 
     public MainViewModel Main { get; }
 
-    public bool HasMissable => Main.OverlayMissable.Count > 0;
+    public bool HasMissable => Main.Overlay.Missable.Count > 0;
 
     private string _toast = "";
     public string Toast { get => _toast; set { if (Set(ref _toast, value)) OnPropertyChanged(nameof(HasToast)); } }

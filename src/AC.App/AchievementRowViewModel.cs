@@ -56,12 +56,12 @@ public sealed class AchievementRowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsTipHidden));
     }
 
-    private GuideTip? Tip => _owner.GuideTipFor(ApiName);
+    private GuideTip? Tip => _owner.Guides.TipFor(ApiName);
 
     public bool HasGuideTip => Tip is not null;
 
     /// <summary>What a guide says about getting it; empty when the guide only shows pictures or a video there.</summary>
-    public string GuideText => _translated && _owner.TipTranslation(ApiName) is { } translation ? translation : Tip?.Text ?? "";
+    public string GuideText => _translated && _owner.Guides.TranslationOf(ApiName) is { } translation ? translation : Tip?.Text ?? "";
 
     private bool _translated;
 
@@ -93,7 +93,7 @@ public sealed class AchievementRowViewModel : ObservableObject
     }
 
     /// <summary>The tip in the overlay: its translation once made, else the guide's words.</summary>
-    public string OverlayTip => _tipInOverlay ? _owner.TipTranslation(ApiName) ?? Tip?.Text ?? "" : "";
+    public string OverlayTip => _tipInOverlay ? _owner.Guides.TranslationOf(ApiName) ?? Tip?.Text ?? "" : "";
 
     /// <summary>A guide tells how to get a hidden achievement even when Steam gave no description: blurred the same way.</summary>
     public bool IsTipHidden => _row.Def.Hidden && !_row.IsDone && _owner.HideSpoilers && !_owner.IsRevealed(ApiName);

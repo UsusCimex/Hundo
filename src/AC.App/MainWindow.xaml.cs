@@ -28,7 +28,7 @@ public partial class MainWindow : Window
         _vm = new MainViewModel(AppServices.CreateDefault());
         DataContext = _vm;
         _vm.Toast += OnToast;
-        _vm.PlayingChanged += OnPlayingChanged;
+        _vm.Watch.PlayingChanged += OnPlayingChanged;
         _startedInTray = inTray;
         Loaded += async (_, _) => await StartAsync();
         UpdateTray();
@@ -148,7 +148,7 @@ public partial class MainWindow : Window
     /// <summary>A message mid-game shows the hidden overlay until the message goes.</summary>
     private void OnToast(string text)
     {
-        if (_vm.Services.Settings.OverlayAuto && _vm.Playing && EnsureOverlay() is { IsVisible: false } hidden)
+        if (_vm.Services.Settings.OverlayAuto && _vm.Watch.Playing && EnsureOverlay() is { IsVisible: false } hidden)
         {
             hidden.Show();
             _overlayForToast = true;

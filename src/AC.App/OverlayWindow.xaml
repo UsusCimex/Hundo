@@ -145,11 +145,11 @@
                         <Button Content="{local:Tr card.done}" Style="{StaticResource OvButton}"
                                 ToolTip="{Binding DataContext.Main.DoneTip, RelativeSource={RelativeSource AncestorType=Window}}"
                                 Visibility="{Binding DataContext.ShowActions, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"
-                                Command="{Binding DataContext.Main.OverlayMarkCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                Command="{Binding DataContext.Main.Overlay.MarkCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding}" />
                         <Button Content="{local:Tr overlay.hide}" Style="{StaticResource OvButton}"
                                 ToolTip="{local:Tr overlay.hideTip}"
-                                Command="{Binding DataContext.Main.OverlayHideCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                Command="{Binding DataContext.Main.Overlay.HideCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding}" />
                     </StackPanel>
                 </StackPanel>
@@ -194,10 +194,10 @@
                 <StackPanel>
                     <TextBlock Text="{local:Tr overlay.missable}" Margin="0,12,0,2" Foreground="{StaticResource OvWarn}" FontWeight="SemiBold" FontSize="11"
                                Visibility="{Binding HasMissable, Converter={StaticResource BoolToVis}}" />
-                    <ItemsControl ItemsSource="{Binding Main.OverlayMissable}" ItemTemplate="{StaticResource OverlayItem}" />
+                    <ItemsControl ItemsSource="{Binding Main.Overlay.Missable}" ItemTemplate="{StaticResource OverlayItem}" />
 
                     <TextBlock Text="{local:Tr overlay.nearest}" Margin="0,12,0,2" Foreground="{StaticResource OvAccent}" FontWeight="SemiBold" FontSize="11" />
-                    <ItemsControl ItemsSource="{Binding Main.OverlayNearest}" ItemTemplate="{StaticResource OverlayItem}" />
+                    <ItemsControl ItemsSource="{Binding Main.Overlay.Nearest}" ItemTemplate="{StaticResource OverlayItem}" />
                 </StackPanel>
             </ScrollViewer>
         </DockPanel>
