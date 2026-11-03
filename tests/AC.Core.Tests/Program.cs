@@ -1196,6 +1196,22 @@ static class Tests
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Service_SampleKeepsMostPlayersReadBeforeTheApiStops()
+    {
+        const string player = """{"playerstats":{"success":true,"achievements":[{"apiname":"ch1","achieved":1,"unlocktime":1700000000}]}}""";
+        var fake = new FakeHttp(url =>
+            url.Contains("IUserReviewsService/GetAppReviews") ? (HttpStatusCode.OK, Reviews)
+            : url.Contains("GetPlayerAchievements") ? (HttpStatusCode.OK, player)
+            : (HttpStatusCode.NotFound, ""),
+            hangs: url => url.Contains("steamid=76561197960287938"));
+        WithService(new AC.Infrastructure.HangGuard(fake, TimeSpan.FromMilliseconds(200), TimeSpan.FromMinutes(1)), (svc, store) =>
+        {
+            var r = svc.CollectSampleAsync(SampleGame(), maxAuthors: 8, targetPlayers: 8).GetAwaiter().GetResult();
+            Assert.Equal(7, r.Players);
+        });
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public static void Service_PercentagesMissingOnlyWhenNobodyHasThem()
     {
         var fake = new FakeHttp(url =>

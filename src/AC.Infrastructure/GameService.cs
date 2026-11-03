@@ -457,7 +457,8 @@ public sealed class GameService
             }
         });
         await Task.WhenAll(tasks);
-        if (fatal != null) throw fatal;
+        // The players read before the API stopped answering make a sample when they are half of those wanted.
+        if (fatal != null && samples.Count < targetPlayers / 2) throw fatal;
         ct.ThrowIfCancellationRequested();
 
         if (samples.Count == 0)
