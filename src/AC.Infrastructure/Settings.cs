@@ -80,7 +80,6 @@ public sealed class AppSettings
     /// <summary>While the open game runs, the achievement whose time is up is marked as by the "Done" checkbox.</summary>
     public bool AutoMark { get; set; }
     public bool HideSpoilers { get; set; } = true;
-    public char CsvSeparator { get; set; } = ';';
 
     public string OverlayToggleHotkey { get; set; } = "Ctrl+Alt+H";
     public string OverlayInteractHotkey { get; set; } = "Ctrl+Alt+J";

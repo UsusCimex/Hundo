@@ -894,7 +894,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (dlg.ShowDialog() != true) return;
         try
         {
-            if (format == "csv") File.WriteAllBytes(dlg.FileName, Exporter.ToCsv(_game, scope, _svc.Settings.CsvSeparator));
+            if (format == "csv") File.WriteAllBytes(dlg.FileName, Exporter.ToCsv(_game, scope));
             else File.WriteAllText(dlg.FileName, Exporter.ToJson(_game, scope));
             StatusMessage = Loc.T("status.saved", dlg.FileName);
         }

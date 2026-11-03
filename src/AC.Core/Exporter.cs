@@ -23,13 +23,16 @@ public static class Exporter
             .Where(r => scope == ExportScope.All || r.Status == EffectiveStatus.ManualDone);
 
     /// <summary>
-    /// CSV with a ";" separator (Russian Excel) and a UTF-8 BOM to avoid mojibake. Fractions go with a decimal comma
-    /// unless the separator is a comma: with a ";" one Excel reads "5.3" as the 5th of March.
+    /// CSV with the list separator and numbers of the Windows regional format, which Excel opens it with (a ";" one
+    /// reads as a single column where the separator is ",", and "5.3" as a date where decimals take a comma), and a
+    /// UTF-8 BOM to avoid mojibake.
     /// </summary>
-    public static byte[] ToCsv(GameData game, ExportScope scope, char separator = ';')
+    /// <param name="format">The regional format; null - the user's.</param>
+    public static byte[] ToCsv(GameData game, ExportScope scope, CultureInfo? format = null)
     {
-        var decimals = (NumberFormatInfo)CultureInfo.InvariantCulture.NumberFormat.Clone();
-        if (separator != ',') decimals.NumberDecimalSeparator = ",";
+        format ??= CultureInfo.CurrentCulture;
+        var separator = format.TextInfo.ListSeparator;
+        var decimals = format.NumberFormat;
         var sb = new StringBuilder();
         string[] header = { "api_name", "name", "status", "date", "kind", "group", "global_pct", "note" };
         sb.AppendLine(string.Join(separator, header));
@@ -82,11 +85,11 @@ public static class Exporter
         _ => "locked",
     };
 
-    private static string Escape(string value, char sep)
+    private static string Escape(string value, string sep)
     {
         // Excel runs a cell that starts like a formula; names come from game developers, notes from shared tags files.
         if (value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r') value = "'" + value;
-        if (value.IndexOfAny(new[] { sep, '"', '\n', '\r' }) < 0) return value;
+        if (!value.Contains(sep, StringComparison.Ordinal) && value.IndexOfAny(['"', '\n', '\r']) < 0) return value;
         return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
 }

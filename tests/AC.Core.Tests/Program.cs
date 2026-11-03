@@ -610,7 +610,8 @@ static class Tests
         var g = SampleGame();
         g.StateOf("misc").ManualDone = true;
         g.StateOf("misc").Note = "сделал; но \"не засчиталось\"";
-        var bytes = Exporter.ToCsv(g, ExportScope.ManualOnly);
+        var russian = System.Globalization.CultureInfo.GetCultureInfo("ru-RU");
+        var bytes = Exporter.ToCsv(g, ExportScope.ManualOnly, russian);
         Assert.True(bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF, "BOM");
         var text = Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
         var lines = text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
@@ -618,15 +619,26 @@ static class Tests
         Assert.True(lines[1].Contains("\"сделал; но \"\"не засчиталось\"\"\""), lines[1]);
         Assert.True(lines[1].Contains("done_not_counted"));
 
-        // With ";" the percentage has a decimal comma: Excel would read 50.0 as a date. With "," it keeps the point.
+        // As the regional format has it: Excel reads the file with it.
         Assert.True(lines[1].Contains(";50,0;"), lines[1]);
-        var comma = Encoding.UTF8.GetString(Exporter.ToCsv(g, ExportScope.ManualOnly, ',')).Split(Environment.NewLine)[1];
-        Assert.True(comma.Contains(",50.0,"), comma);
+        var english = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+        var comma = Encoding.UTF8.GetString(Exporter.ToCsv(g, ExportScope.ManualOnly, english)).Split(Environment.NewLine)[1];
+        Assert.True(comma.Contains(",50.0,") && comma.Contains("\"сделал; но \"\"не засчиталось\"\"\""), comma);
+        var user = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = english;
+            Assert.Equal(comma, Encoding.UTF8.GetString(Exporter.ToCsv(g, ExportScope.ManualOnly)).Split(Environment.NewLine)[1]);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = user;
+        }
 
         // A text that starts like a formula stays text in Excel.
         g.StateOf("misc").Note = "=HYPERLINK(\"http://x/\";\"open\")";
         g.Achievements.Single(a => a.ApiName == "misc").Name = "@sum";
-        var formula = Encoding.UTF8.GetString(Exporter.ToCsv(g, ExportScope.ManualOnly)).Split(Environment.NewLine)[1];
+        var formula = Encoding.UTF8.GetString(Exporter.ToCsv(g, ExportScope.ManualOnly, russian)).Split(Environment.NewLine)[1];
         Assert.True(formula.Contains(";'@sum;") && formula.EndsWith(";\"'=HYPERLINK(\"\"http://x/\"\";\"\"open\"\")\""), formula);
     }
 
@@ -2150,7 +2162,7 @@ static class Tests
         {
             var store = new AC.Infrastructure.JsonStore(dir);
             File.WriteAllText(Path.Combine(dir, "settings.json"), """
-                { "Theme": "Neon", "SteamId64": 76561197960287930, "CsvSeparator": "ab", "OverlayToggleHotkey": "Ctrl+Alt+H",
+                { "Theme": "Neon", "SteamId64": 76561197960287930, "OverlayToggleHotkey": "Ctrl+Alt+H",
                   "UiLanguage": null, "PollSeconds": 30, "FromNewerVersion": true }
                 """);
             var s = store.LoadSettings();
@@ -2158,7 +2170,6 @@ static class Tests
             Assert.Equal("Ctrl+Alt+H", s.OverlayToggleHotkey);
             Assert.Equal(30, s.PollSeconds);
             Assert.Equal(AC.Infrastructure.AppTheme.System, s.Theme);
-            Assert.Equal(';', s.CsvSeparator);
             Assert.Equal(Loc.Fallback, s.UiLanguage);
             Assert.Equal(1, Directory.GetFiles(dir, "settings.json.broken-*").Length); // the file as it was
             Assert.True(!File.ReadAllText(Path.Combine(dir, "settings.json")).Contains("Neon"), "written back, not set aside on every start");
@@ -2288,7 +2299,6 @@ static class Tests
             var s2 = store.LoadSettings();
             Assert.Equal(76561198000000002UL, s2.SteamId64);
             Assert.Equal(AC.Infrastructure.WriteMode.Queue, s2.WriteMode);
-            Assert.Equal(';', s2.CsvSeparator);
 
             store.AppendLog(new AC.Infrastructure.UnlockLogEntry { At = DateTimeOffset.Now, AppId = 1, ApiName = "misc", Action = "unlock", Ok = true });
             store.AppendLog(new AC.Infrastructure.UnlockLogEntry { At = DateTimeOffset.Now, AppId = 2, ApiName = "x", Action = "unlock", Ok = false, Error = "e" });
