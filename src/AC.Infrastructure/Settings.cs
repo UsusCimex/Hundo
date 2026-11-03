@@ -1,3 +1,5 @@
+using System.Runtime.Versioning;
+using System.Text.Json.Serialization;
 using AC.Core;
 
 namespace AC.Infrastructure;
@@ -61,11 +63,37 @@ public sealed class AppSettings
 
     /// <summary>API key encrypted with DPAPI (base64). Never stored as plain text.</summary>
     public string ApiKeyProtected { get; set; } = "";
+
+    /// <summary>The Steam Web API key, decrypted from <see cref="ApiKeyProtected"/>.</summary>
+    [JsonIgnore, SupportedOSPlatform("windows")]
+    public string ApiKey
+    {
+        get => Dpapi.Unprotect(ApiKeyProtected);
+        set => ApiKeyProtected = Dpapi.Protect(value.Trim());
+    }
+
+    [JsonIgnore, SupportedOSPlatform("windows")]
+    public bool HasApiKey => ApiKey.Length > 0;
+
+    /// <summary>The key to read the player through the Web API; throws without it or without the player's SteamID.</summary>
+    [SupportedOSPlatform("windows")]
+    public string RequireApiKey()
+    {
+        var key = ApiKey;
+        if (key.Length == 0) throw new SteamApiException(Loc.T("error.noKey"));
+        if (SteamId64 == 0) throw new SteamApiException(Loc.T("error.noSteamId"));
+        return key;
+    }
+
     public ulong SteamId64 { get; set; }
     /// <summary>Interface language code (en, ru...); empty means the Windows language.</summary>
     public string UiLanguage { get; set; } = Loc.Fallback;
     /// <summary>Steam language of achievement names and descriptions (english, russian...); empty means the interface language.</summary>
     public string Language { get; set; } = "";
+
+    /// <summary>The Steam language names and descriptions come in: the chosen one or the interface language.</summary>
+    [JsonIgnore]
+    public string ContentLanguage => Language.Length > 0 ? Language : Loc.SteamLanguage(Loc.Language);
     public Percentile Percentile { get; set; } = Percentile.P50;
     public HoursMode Hours { get; set; } = HoursMode.FromStart;
     public LibrarySort LibrarySort { get; set; } = LibrarySort.Recent;

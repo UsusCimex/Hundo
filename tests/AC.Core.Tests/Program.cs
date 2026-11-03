@@ -289,10 +289,10 @@ static class Tests
             svc.Settings.WriteMode = AC.Infrastructure.WriteMode.MarkAndUnlock;
             var g = SampleGame();
             g.StateFetchedAt = DateTimeOffset.Now.AddHours(-1);
-            var report = svc.CompleteAsync(g, ["misc"]).GetAwaiter().GetResult();
+            var report = svc.Marks.CompleteAsync(g, ["misc"]).GetAwaiter().GetResult();
             Assert.True(report.SteamWritten && g.StateOf("misc").SteamUnlocked, $"written: {report}");
             // The Web API does not show the write yet.
-            Assert.Equal(0, svc.RefreshStateAsync(g).GetAwaiter().GetResult().Count);
+            Assert.Equal(0, svc.Status.ReadWebApiAsync(g).GetAwaiter().GetResult().Count);
             Assert.True(g.StateOf("misc").SteamUnlocked, "the write stands against the Web API");
         }, helper: """{"ok":true,"changes":[{"api_name":"misc","ok":true}]}""");
     }
@@ -305,9 +305,9 @@ static class Tests
             svc.Settings.ManualUnlocks = true;
             svc.Settings.WriteMode = AC.Infrastructure.WriteMode.MarkAndUnlock;
             var g = SampleGame();
-            Assert.True(svc.CompleteAsync(g, ["misc"]).GetAwaiter().GetResult().SteamWritten, "written");
+            Assert.True(svc.Marks.CompleteAsync(g, ["misc"]).GetAwaiter().GetResult().SteamWritten, "written");
             g.StateOf("misc").AutoMarkedAt = DateTimeOffset.Now;
-            Assert.True(svc.RevertInSteamAsync(g, "misc").GetAwaiter().GetResult().SteamWritten, "revoked");
+            Assert.True(svc.Marks.RevertAsync(g, "misc").GetAwaiter().GetResult().SteamWritten, "revoked");
             Assert.Equal(EffectiveStatus.Locked, GameLogic.StatusOf(store.LoadGame(1)!.States["misc"]));
             g.MarkByTime = true;
             Assert.True(GameLogic.BuildRows(g, Percentile.P50).Single(r => r.ApiName == "misc").AutoMarkUndone,
@@ -334,24 +334,24 @@ static class Tests
             // Only marks: Steam is not asked.
             svc.Settings.WriteMode = AC.Infrastructure.WriteMode.MarkOnly;
             var g = Fresh();
-            var r = svc.CompleteAsync(g, names).GetAwaiter().GetResult();
+            var r = svc.Marks.CompleteAsync(g, names).GetAwaiter().GetResult();
             Assert.True(!r.SteamWritten && r.Error is null && g.PendingUnlocks.Count == 0, $"{r}");
             Assert.Equal("Unlocked,ManualDone,ManualDone,ManualDone", Statuses(g));
 
             // The queue takes what can be written; a protected one is only marked.
             svc.Settings.WriteMode = AC.Infrastructure.WriteMode.Queue;
             g = Fresh();
-            r = svc.CompleteAsync(g, names).GetAwaiter().GetResult();
+            r = svc.Marks.CompleteAsync(g, names).GetAwaiter().GetResult();
             Assert.Equal("misc,grind", string.Join(",", g.PendingUnlocks));
             Assert.True(r.Error?.Contains("Finale") == true, $"the protected one is named: {r.Error}");
-            svc.Uncomplete(g, "misc");
+            svc.Marks.Uncomplete(g, "misc");
             Assert.True(GameLogic.StatusOf(g.States["misc"]) == EffectiveStatus.Locked && g.PendingUnlocks.SequenceEqual(["grind"]),
                 "taken back, and out of the queue");
 
             // Written at once.
             svc.Settings.WriteMode = AC.Infrastructure.WriteMode.MarkAndUnlock;
             g = Fresh();
-            r = svc.CompleteAsync(g, names).GetAwaiter().GetResult();
+            r = svc.Marks.CompleteAsync(g, names).GetAwaiter().GetResult();
             Assert.True(r.SteamWritten, $"{r}");
             Assert.Equal("Unlocked,ManualDone,Unlocked,Unlocked", Statuses(g));
             Assert.Equal("misc,grind", string.Join(",", store.ReadLog(1).Select(e => e.ApiName)));
@@ -705,7 +705,7 @@ static class Tests
         var entries = g.Achievements
             .Select(a => new AC.Infrastructure.SchemaEntry(a.ApiName, a.Name + "!", "", a.Hidden, "icon.jpg", "gray.jpg"))
             .ToList();
-        AC.Infrastructure.GameService.MergeSchema(g, entries);
+        AC.Infrastructure.GameLoader.MergeSchema(g, entries);
         Assert.Equal(42.0, g.Achievements[0].SamplePercent);
         Assert.True(g.Achievements[0].Protected);
         Assert.Equal(90.0, g.Achievements[0].GlobalPercent);
@@ -723,7 +723,7 @@ static class Tests
         var english = g.Achievements
             .Select(a => new SchemaAchievement { ApiName = a.ApiName, Name = "English", Description = "English " + a.ApiName, Hidden = a.Hidden })
             .ToList();
-        AC.Infrastructure.GameService.MergeLocalSchema(g, english, textsFromLocal: false);
+        AC.Infrastructure.GameLoader.MergeLocalSchema(g, english, textsFromLocal: false);
         Assert.Equal("English miss", hidden.Description);
         Assert.Equal("Complete chapter 5", g.Achievements.Single(a => a.ApiName == "ch5").Description);
         Assert.Equal("Finale", g.Achievements.Single(a => a.ApiName == "ch5").Name);
@@ -971,10 +971,10 @@ static class Tests
         // The helper acts as whoever is signed in to the Steam client: only the account in the settings may be used.
         const ulong mine = 76561198000000000UL;
         uint account = (uint)(mine - 76561197960265728UL);
-        Assert.True(!AC.Infrastructure.GameService.OtherAccount(account, mine), "the same account");
-        Assert.True(AC.Infrastructure.GameService.OtherAccount(account + 1, mine), "another account");
-        Assert.True(!AC.Infrastructure.GameService.OtherAccount(0, mine), "Steam not running: unknown");
-        Assert.True(!AC.Infrastructure.GameService.OtherAccount(account + 1, 0), "no account in the settings");
+        Assert.True(!AC.Infrastructure.BridgeClient.OtherAccount(account, mine), "the same account");
+        Assert.True(AC.Infrastructure.BridgeClient.OtherAccount(account + 1, mine), "another account");
+        Assert.True(!AC.Infrastructure.BridgeClient.OtherAccount(0, mine), "Steam not running: unknown");
+        Assert.True(!AC.Infrastructure.BridgeClient.OtherAccount(account + 1, 0), "no account in the settings");
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
@@ -983,7 +983,7 @@ static class Tests
         // A read through the Steam client shows the user in the game: browsing the library must not do it each time.
         var read = new DateTimeOffset(2026, 10, 31, 12, 0, 0, TimeSpan.Zero);
         bool May(DateTimeOffset? at, DateTimeOffset? written, bool running = false) =>
-            AC.Infrastructure.GameService.StatusMayHaveChanged(at, written, running);
+            AC.Infrastructure.StatusReader.MayHaveChanged(at, written, running);
         Assert.True(May(null, null), "never read");
         Assert.True(!May(read, null), "read, no stats file");
         Assert.True(!May(read, read.AddSeconds(20)), "the stats file written by the read itself");
@@ -1152,7 +1152,7 @@ static class Tests
             foreach (var a in g.Achievements) a.GlobalPercent = null;
             store.SaveGame(g);
 
-            var report = svc.LoadGameAsync(1).GetAwaiter().GetResult();
+            var report = svc.Loader.LoadAsync(1).GetAwaiter().GetResult();
             Assert.Equal(Loc.T("error.networkBlocked"), report.Warnings.Single());
             Assert.True(report.Game.Achievements.All(a => a.GlobalPercent is not null), "percentages from Steam Hunters");
             Assert.Equal(600.0, report.Game.CompletionMinutes);
@@ -1162,7 +1162,7 @@ static class Tests
             fake.Urls.Clear();
             try
             {
-                svc.CollectSampleAsync(report.Game).GetAwaiter().GetResult();
+                svc.Sample.CollectAsync(report.Game).GetAwaiter().GetResult();
                 Assert.True(false, "a blocked network ends the sample");
             }
             catch (AC.Infrastructure.SteamApiException e)
@@ -1188,7 +1188,7 @@ static class Tests
         {
             try
             {
-                svc.CollectSampleAsync(SampleGame()).GetAwaiter().GetResult();
+                svc.Sample.CollectAsync(SampleGame()).GetAwaiter().GetResult();
                 Assert.True(false, "no sample of the few asked before the host stopped answering");
             }
             catch (AC.Infrastructure.SteamApiException) { }
@@ -1206,7 +1206,7 @@ static class Tests
             hangs: url => url.Contains("steamid=76561197960287938"));
         WithService(new AC.Infrastructure.HangGuard(fake, TimeSpan.FromMilliseconds(200), TimeSpan.FromMinutes(1)), (svc, store) =>
         {
-            var r = svc.CollectSampleAsync(SampleGame(), maxAuthors: 8, targetPlayers: 8).GetAwaiter().GetResult();
+            var r = svc.Sample.CollectAsync(SampleGame(), maxAuthors: 8, targetPlayers: 8).GetAwaiter().GetResult();
             Assert.Equal(7, r.Players);
         });
     }
@@ -1222,7 +1222,7 @@ static class Tests
             : (HttpStatusCode.NotFound, ""));
         WithService(fake, (svc, store) =>
         {
-            var report = svc.LoadGameAsync(1, "Test").GetAwaiter().GetResult();
+            var report = svc.Loader.LoadAsync(1, "Test").GetAwaiter().GetResult();
             Assert.Equal(5, report.Game.Achievements.Count);
             Assert.True(report.PercentagesMissing, "Steam and Steam Hunters answered with nothing");
             Assert.Equal((double?)null, report.Game.CompletionMinutes);
@@ -1244,7 +1244,7 @@ static class Tests
         {
             store.SaveGame(SampleGame());
             open = store.LoadGame(1)!;
-            var report = svc.LoadGameAsync(1, forceSchema: true, current: open).GetAwaiter().GetResult();
+            var report = svc.Loader.LoadAsync(1, forceSchema: true, current: open).GetAwaiter().GetResult();
             Assert.True(ReferenceEquals(open, report.Game), "the open game is reloaded in place");
             Assert.Equal("typed while Steam answers", store.LoadGame(1)!.States["miss"].Note);
         });
@@ -1253,20 +1253,20 @@ static class Tests
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public static void Service_GameOpenedAgainWhileItLoads()
     {
-        AC.Infrastructure.GameService? service = null;
+        AC.Infrastructure.AppServices? service = null;
         var fake = new FakeHttp(url =>
         {
             if (!url.Contains("GetSchemaForGame")) return (HttpStatusCode.NotFound, "");
             // While Steam answers, the user goes to another game and back, and writes a note.
-            if (service?.Cached(1) is { } again) service.SetNote(again, "miss", "typed meanwhile");
+            if (service?.Games.Cached(1) is { } again) service.Games.SetNote(again, "miss", "typed meanwhile");
             return (HttpStatusCode.OK, Schema);
         });
         WithService(fake, (svc, store) =>
         {
             store.SaveGame(SampleGame());
-            var shown = svc.Cached(1);
+            var shown = svc.Games.Cached(1);
             service = svc;
-            svc.LoadGameAsync(1, forceSchema: true, current: shown).GetAwaiter().GetResult();
+            svc.Loader.LoadAsync(1, forceSchema: true, current: shown).GetAwaiter().GetResult();
             Assert.Equal("typed meanwhile", store.LoadGame(1)!.States["miss"].Note);
         });
     }
@@ -1282,7 +1282,7 @@ static class Tests
             var g = SampleGame();
             // Steam has no percentage for one, and the read brings one the game did not list.
             g.Achievements.Single(a => a.ApiName == "misc").GlobalPercent = null;
-            for (int poll = 0; poll < 3; poll++) Assert.Equal(null, svc.RefreshViaBridgeAsync(g).GetAwaiter().GetResult().Error);
+            for (int poll = 0; poll < 3; poll++) Assert.Equal(null, svc.Status.ReadViaClientAsync(g).GetAwaiter().GetResult().Error);
             Assert.True(g.Achievements.Any(a => a.ApiName == "extra"), "the new one is listed");
             Assert.Equal(1, fake.Urls.Count(u => u.Contains("GetGlobalAchievementPercentagesForApp")));
         }, helper: """{"ok":true,"achievements":[{"api_name":"misc","achieved":false},{"api_name":"extra","achieved":false}]}""");
@@ -1360,7 +1360,7 @@ static class Tests
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     /// <param name="helper">The line a stand-in for the Steam client helper answers every call with; null - no helper.</param>
-    static void WithService(HttpMessageHandler fake, Action<AC.Infrastructure.GameService, AC.Infrastructure.JsonStore> body,
+    static void WithService(HttpMessageHandler fake, Action<AC.Infrastructure.AppServices, AC.Infrastructure.JsonStore> body,
         string? helper = null)
     {
         var dir = Path.Combine(Path.GetTempPath(), "ac-test-" + Guid.NewGuid().ToString("N"));
@@ -1379,9 +1379,9 @@ static class Tests
             var helperPath = Path.Combine(dir, "helper.cmd");
             if (helper is not null) File.WriteAllText(helperPath, "@echo " + helper);
             var http = new HttpClient(fake);
-            var svc = new AC.Infrastructure.GameService(store, new AC.Infrastructure.SteamWebApi(http),
+            var svc = new AC.Infrastructure.AppServices(store, new AC.Infrastructure.SteamWebApi(http),
                 new AC.Infrastructure.BridgeClient(helperPath), new AC.Infrastructure.SteamHunters(http));
-            svc.ApiKey = "00000000000000000000000000000000";
+            svc.Settings.ApiKey = "00000000000000000000000000000000";
             body(svc, store);
         }
         finally
@@ -2196,6 +2196,28 @@ static class Tests
         }
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void JsonStore_SavesTheKeyOnlyEncrypted()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ac-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new AC.Infrastructure.JsonStore(dir);
+            const string key = "0123456789ABCDEF0123456789ABCDEF";
+            var s = store.LoadSettings();
+            s.ApiKey = " " + key + " ";
+            store.SaveSettings(s);
+            var text = File.ReadAllText(Path.Combine(dir, "settings.json"));
+            Assert.True(!text.Contains(key) && !text.Contains("\"ApiKey\"") && !text.Contains("HasApiKey") && !text.Contains("ContentLanguage"),
+                "only the encrypted key is saved");
+            Assert.Equal(key, store.LoadSettings().ApiKey);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
     public static void JsonStore_MovesOldDefaultHotkeysOnce()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ac-test-" + Guid.NewGuid().ToString("N"));
@@ -2267,7 +2289,7 @@ static class Tests
             var g = SampleGame();
             using (new FileStream(store.LogPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
             {
-                var r = svc.CompleteAsync(g, ["misc", "grind"]).GetAwaiter().GetResult();
+                var r = svc.Marks.CompleteAsync(g, ["misc", "grind"]).GetAwaiter().GetResult();
                 Assert.True(r.SteamWritten, $"{r}");
             }
             Assert.True(g.States["misc"].SteamUnlocked && g.States["grind"].SteamUnlocked, "both written, as Steam answered");

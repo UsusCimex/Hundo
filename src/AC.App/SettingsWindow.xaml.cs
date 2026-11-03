@@ -10,15 +10,15 @@ namespace AC.App;
 
 public partial class SettingsWindow : Window
 {
-    private readonly GameService _svc;
+    private readonly AppServices _svc;
 
-    public SettingsWindow(GameService svc)
+    public SettingsWindow(AppServices svc)
     {
         InitializeComponent();
         WindowFit.ToWorkArea(this);
         _svc = svc;
         var s = svc.Settings;
-        ApiKeyBox.Password = svc.ApiKey;
+        ApiKeyBox.Password = svc.Settings.ApiKey;
         SteamIdBox.Text = s.SteamId64 == 0 ? "" : s.SteamId64.ToString(CultureInfo.InvariantCulture);
         LanguageBox.SelectedItem = Options.ContentLanguages.FirstOrDefault(l => l.Value == s.Language) ?? Options.ContentLanguages[0];
         UiLanguageBox.SelectedItem = Options.UiLanguages.FirstOrDefault(l => l.Value == s.UiLanguage) ?? Options.UiLanguages[0];
@@ -119,7 +119,7 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        _svc.ApiKey = ApiKeyBox.Password;
+        _svc.Settings.ApiKey = ApiKeyBox.Password;
         s.SteamId64 = steamId;
         s.Language = (LanguageBox.SelectedItem as Option<string>)?.Value ?? "";
         s.UiLanguage = (UiLanguageBox.SelectedItem as Option<string>)?.Value ?? Loc.Fallback;

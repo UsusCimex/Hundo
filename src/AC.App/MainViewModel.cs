@@ -13,7 +13,7 @@ namespace AC.App;
 
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
-    private readonly GameService _svc;
+    private readonly AppServices _svc;
     private readonly DispatcherTimer _runningTimer;
     private GameData? _game;
     private StatsFileWatcher? _watcher;
@@ -35,7 +35,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly HashSet<string> _revealed = new(StringComparer.Ordinal);
     private GuideTips? _guides;
 
-    public MainViewModel(GameService svc)
+    public MainViewModel(AppServices svc)
     {
         _svc = svc;
         Library = new LibraryViewModel(svc);
@@ -56,7 +56,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         FetchCompletionCommand = new AsyncCommand(FetchCompletionAsync, OnError, () => _game != null);
         ApplyCompletionCommand = new RelayCommand(ApplyCompletion, () => _game != null);
         ApplyPlaytimeCommand = new RelayCommand(ApplyPlaytime, () => _game != null);
-        CollectSampleCommand = new AsyncCommand(() => CollectSampleAsync(auto: false), OnError, () => _game != null && _svc.HasApiKey);
+        CollectSampleCommand = new AsyncCommand(() => CollectSampleAsync(auto: false), OnError, () => _game != null && _svc.Settings.HasApiKey);
         OpenGuideCommand = new RelayCommand(p => OpenGuide(p as string), _ => _game != null && SelectedRow != null);
         ExportCsvCommand = new RelayCommand(p => Export("csv", p as string == "manual"), _ => _game != null);
         ExportJsonCommand = new RelayCommand(p => Export("json", p as string == "manual"), _ => _game != null);
@@ -87,10 +87,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
         };
 
-        Library.Fill(svc.CachedLibrary(), null);
+        Library.Fill(svc.Library.Cached(), null);
     }
 
-    public GameService Service => _svc;
+    public AppServices Services => _svc;
     public GameData? Game => _game;
     public event Action<string>? Toast;
 
@@ -194,7 +194,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     public bool HideSpoilers => _svc.Settings.HideSpoilers;
-    public bool HasApiKey => _svc.HasApiKey;
+    public bool HasApiKey => _svc.Settings.HasApiKey;
     /// <summary>Manual marks and Steam writes are enabled in settings.</summary>
     public bool ManualUnlocks => _svc.Settings.ManualUnlocks;
 
@@ -409,7 +409,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var running = await _play.StartAsync();
         _runningTimer.Start();
 
-        if (!_svc.HasApiKey)
+        if (!_svc.Settings.HasApiKey)
         {
             StatusMessage = Loc.T("status.noKey");
         }
@@ -428,7 +428,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         await Busy(Loc.T("status.loadingLibrary"), async () =>
         {
-            var games = await _svc.RefreshLibraryAsync();
+            var games = await _svc.Library.RefreshAsync();
             Library.Fill(games, _game?.AppId);
             StatusMessage = Loc.Plural("status.libraryLoaded", games.Count);
         });
@@ -450,11 +450,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         LoadReport? loaded = null;
         // A game opened before shows at once from its file: Steam's answers fill it in when they come, and what is
         // done to it meanwhile stays.
-        var shown = _svc.Cached(appId);
+        var shown = _svc.Games.Cached(appId);
         if (shown is not null) SetGame(shown);
         await Busy(Loc.T("status.loadingGame", name ?? appId.ToString()), async () =>
         {
-            var report = await _svc.LoadGameAsync(appId, name, running: _play.Sessions.IsRunning(appId), current: shown);
+            var report = await _svc.Loader.LoadAsync(appId, name, running: _play.Sessions.IsRunning(appId), current: shown);
             if (seq != _loadSeq) return; // another game picked while loading
             loaded = report;
             if (shown is null) SetGame(report.Game);
@@ -467,25 +467,25 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // With the "Steam client" source the load skipped the status, so read it now, unless nothing can have changed:
         // browsing the library would show the user in every game opened.
         if (seq == _loadSeq && _game is { } opened && opened.AppId == appId &&
-            (_svc.Settings.StatusSource == StatusSource.SteamClient || !_svc.HasApiKey) && _svc.Bridge.Exists &&
-            _svc.StatusMayHaveChanged(opened, _play.Sessions.IsRunning(appId)))
+            (_svc.Settings.StatusSource == StatusSource.SteamClient || !_svc.Settings.HasApiKey) && _svc.Bridge.Exists &&
+            _svc.Status.MayHaveChanged(opened, _play.Sessions.IsRunning(appId)))
             await SafeAsync(RefreshStateAsync);
 
         // Neither Steam nor Steam Hunters has percentages (a new game): collect player statistics ourselves.
         // An attempt, failed or not, is not repeated for a week; a collected sample is refreshed weekly in the background.
-        if (seq == _loadSeq && _game is { } g && g.AppId == appId && _svc.HasApiKey && g.Achievements.Count > 0)
+        if (seq == _loadSeq && _game is { } g && g.AppId == appId && _svc.Settings.HasApiKey && g.Achievements.Count > 0)
         {
             bool tried = g.SampleTriedAt is { } at && DateTimeOffset.Now - at < SampleRefresh;
             if (loaded?.PercentagesMissing == true && g.SampleFetchedAt is null && !tried)
             {
                 g.SampleTriedAt = DateTimeOffset.Now;
-                _svc.Store.SaveGame(g);
+                _svc.Games.Save(g);
                 await SafeAsync(() => CollectSampleAsync(auto: true));
             }
             else if (g.SampleFetchedAt is { } fetched && DateTimeOffset.Now - fetched > SampleRefresh && !tried)
             {
                 g.SampleTriedAt = DateTimeOffset.Now;
-                _svc.Store.SaveGame(g);
+                _svc.Games.Save(g);
                 _ = RefreshSampleAsync(g);
             }
         }
@@ -508,7 +508,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         try
         {
-            if (await _svc.TranslateTipAsync(_game.AppId, _guides, row.ApiName, Loc.Language) is not null)
+            if (await _svc.Guides.TranslateAsync(_game.AppId, _guides, row.ApiName, Loc.Language) is not null)
             {
                 row.ShowTranslation(true);
                 foreach (var shown in OverlayNearest.Where(r => r.ApiName == row.ApiName)) shown.RefreshGuide();
@@ -525,7 +525,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Tips from Steam guides, read in the background: the rows show them when they arrive.</summary>
     private async Task LoadGuidesAsync(GameData game)
     {
-        var tips = await _svc.GetGuideTipsAsync(game);
+        var tips = await _svc.Guides.GetAsync(game);
         if (!ReferenceEquals(game, _game)) return;
         _guides = tips;
         foreach (var row in Rows.Concat(OverlayNearest)) row.RefreshGuide();
@@ -544,18 +544,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _sampleRefreshing = true;
         try
         {
-            var r = await _svc.CollectSampleAsync(game);
+            var r = await _svc.Sample.CollectAsync(game);
             // The game may have been reopened meanwhile: apply to the current copy or the saved one, not a stale one.
-            var target = _game?.AppId == game.AppId ? _game : _svc.Cached(game.AppId);
+            var target = _game?.AppId == game.AppId ? _game : _svc.Games.Cached(game.AppId);
             if (target is null) return;
             if (r.Players >= Math.Max(1, target.SamplePlayers / 2))
             {
-                _svc.ApplySample(target, r);
+                _svc.Sample.Apply(target, r);
             }
             else
             {
                 target.SampleFetchedAt = DateTimeOffset.Now;
-                _svc.Store.SaveGame(target);
+                _svc.Games.Save(target);
             }
             if (!ReferenceEquals(target, _game)) return;
             Recompute(rebuildRows: true);
@@ -578,9 +578,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var progress = new Progress<string>(m => StatusMessage = m);
         await Busy(Loc.T(auto ? "status.sampleAuto" : "status.sampleCollecting"), async () =>
         {
-            var r = await _svc.CollectSampleAsync(game, progress);
+            var r = await _svc.Sample.CollectAsync(game, progress);
             var target = _game?.AppId == game.AppId ? _game! : game;
-            _svc.ApplySample(target, r);
+            _svc.Sample.Apply(target, r);
             if (!ReferenceEquals(target, _game)) return;
             Recompute(rebuildRows: true);
             StatusMessage = Loc.Plural("status.sampleDone", r.Players) +
@@ -623,7 +623,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         await Busy(Loc.T("status.reloading"), async () =>
         {
             var seq = ++_loadSeq;
-            var report = await _svc.LoadGameAsync(_game.AppId, _game.Name, forceSchema: force, running: _play.Sessions.IsRunning(_game.AppId),
+            var report = await _svc.Loader.LoadAsync(_game.AppId, _game.Name, forceSchema: force, running: _play.Sessions.IsRunning(_game.AppId),
                 current: _game);
             if (seq != _loadSeq) return;
             ShowLoaded(report.Game, sameGame: true);
@@ -639,7 +639,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (_game is not { } game || !_reading.Add(game.AppId)) return;
         try
         {
-            var fresh = await _svc.RefreshStateAutoAsync(game);
+            var fresh = await _svc.Status.ReadAsync(game);
             _sincePoll.Restart();
             if (!ReferenceEquals(game, _game)) return;
             // Do not rebuild the table while the user types in a row, otherwise the input is lost.
@@ -659,7 +659,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (_game is null) return;
         await Busy(Loc.T("status.readingClient"), async () =>
         {
-            var (fresh, error) = await _svc.RefreshViaBridgeAsync(_game);
+            var (fresh, error) = await _svc.Status.ReadViaClientAsync(_game);
             if (error != null)
             {
                 StatusMessage = Loc.T("error.client", error);
@@ -678,7 +678,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
         await Busy(Loc.T("status.writing"), async () =>
         {
-            var r = await _svc.FlushQueueAsync(_game);
+            var r = await _svc.Marks.FlushQueueAsync(_game);
             Recompute(rebuildRows: true);
             StatusMessage = r.Error is null ? Loc.T("status.queueSent") : Loc.T("status.writePartial", r.Error);
         });
@@ -704,7 +704,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// "Done" for achievements of the open game, wherever it is pressed and by time: marked, and in Steam what the write
-    /// mode says (<see cref="GameService.CompleteAsync"/>).
+    /// mode says (<see cref="MarkService.CompleteAsync"/>).
     /// </summary>
     /// <param name="inGame">From the overlay or by time: the player is in the game, so the result shows there too.</param>
     /// <param name="byTime">An auto mark.</param>
@@ -715,7 +715,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         MarkReport r;
         try
         {
-            r = await _svc.CompleteAsync(game, apiNames);
+            r = await _svc.Marks.CompleteAsync(game, apiNames);
         }
         finally
         {
@@ -737,12 +737,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private async Task RevertAsync(AchievementRowViewModel? row)
     {
         if (_game is null || row is null) return;
-        if (!_svc.WasWrittenByApp(_game.AppId, row.ApiName) &&
+        if (!_svc.Marks.WasWrittenByApp(_game.AppId, row.ApiName) &&
             MessageBox.Show(Loc.T("dialog.revertForeign"),
                 "Hundo", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         await Busy(Loc.T("status.reverting"), async () =>
         {
-            var r = await _svc.RevertInSteamAsync(_game, row.ApiName);
+            var r = await _svc.Marks.RevertAsync(_game, row.ApiName);
             Recompute(rebuildRows: false);
             StatusMessage = r.Error is null ? Loc.T("status.reverted", row.Name) : Loc.T("status.error", r.Error);
         });
@@ -753,7 +753,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (_game is null) return;
         await Busy(Loc.T("status.fetchingCompletion"), async () =>
         {
-            var m = await _svc.FetchCompletionAsync(_game);
+            var m = await _svc.Loader.FetchCompletionAsync(_game);
             if (m is null)
             {
                 StatusMessage = Loc.T("status.completionFailed");
@@ -785,7 +785,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
             minutes = h * 60;
         }
-        _svc.SetCompletionMinutes(_game, minutes, "manual");
+        _svc.Games.SetCompletionMinutes(_game, minutes, "manual");
         _hoursFilled.Completion = CompletionInput;
         Recompute(rebuildRows: false);
         StatusMessage = Loc.T(minutes is null ? "status.completionReset" : "status.estimatesUpdated");
@@ -801,7 +801,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         if (PlaytimeOverrideInput == _hoursFilled.Override) overrideMin = _game.PlaytimeOverrideMinutes;
         if (PlaytimeOffsetInput == _hoursFilled.Offset) offsetMin = _game.PlaytimeOffsetMinutes;
-        _svc.SetPlaytime(_game, overrideMin, offsetMin ?? 0);
+        _svc.Games.SetPlaytime(_game, overrideMin, offsetMin ?? 0);
         _hoursFilled.Override = PlaytimeOverrideInput;
         _hoursFilled.Offset = PlaytimeOffsetInput;
         Recompute(rebuildRows: false);
@@ -837,7 +837,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (_game is not { } game) return;
         try
         {
-            _svc.Uncomplete(game, row.ApiName);
+            _svc.Marks.Uncomplete(game, row.ApiName);
         }
         finally
         {
@@ -849,34 +849,34 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     internal void OnKindChanged(AchievementRowViewModel row, AchievementKind kind)
     {
         if (_game is null) return;
-        _svc.SetKind(_game, row.ApiName, kind);
+        _svc.Games.SetKind(_game, row.ApiName, kind);
         Recompute(rebuildRows: false);
     }
 
     internal void OnGroupChanged(AchievementRowViewModel row, string group)
     {
         if (_game is null) return;
-        _svc.SetGroup(_game, row.ApiName, group);
+        _svc.Games.SetGroup(_game, row.ApiName, group);
         Recompute(rebuildRows: false);
     }
 
     internal void OnNoteChanged(AchievementRowViewModel row, string note)
     {
         if (_game is null) return;
-        _svc.SetNote(_game, row.ApiName, note);
+        _svc.Games.SetNote(_game, row.ApiName, note);
     }
 
     internal void OnInOverlayChanged(AchievementRowViewModel row, bool inOverlay)
     {
         if (_game is null) return;
-        _svc.SetOffOverlay(_game, row.ApiName, !inOverlay);
+        _svc.Games.SetOffOverlay(_game, row.ApiName, !inOverlay);
         Recompute(rebuildRows: false);
     }
 
     internal void OnEstimateChanged(AchievementRowViewModel row, double? minutes)
     {
         if (_game is null) return;
-        _svc.SetManualEstimate(_game, row.ApiName, minutes);
+        _svc.Games.SetManualEstimate(_game, row.ApiName, minutes);
         Recompute(rebuildRows: false);
     }
 
@@ -927,7 +927,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (dlg.ShowDialog() != true) return;
         try
         {
-            var n = _svc.ImportTags(_game, File.ReadAllText(dlg.FileName));
+            var n = _svc.Games.ImportTags(_game, File.ReadAllText(dlg.FileName));
             Recompute(rebuildRows: true);
             StatusMessage = Loc.Plural("status.tagsApplied", n);
         }
@@ -980,7 +980,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public void SettingsChanged()
     {
-        if (_game != null) _svc.Relabel(_svc.WithMarkSettings(_game));
+        if (_game != null) _svc.Games.Relabel(_svc.Games.WithMarkSettings(_game));
         if (!ManualUnlocks && _status == StatusFilter.NotCounted)
         {
             _status = StatusFilter.All;
@@ -997,7 +997,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         RestartWatcher();
         Recompute(rebuildRows: true);
         CommandManager.InvalidateRequerySuggested();
-        if (_game != null && _svc.NeedsSchemaReload(_game)) _ = SafeAsync(() => ReloadAsync(force: false));
+        if (_game != null && _svc.Loader.NeedsSchemaReload(_game)) _ = SafeAsync(() => ReloadAsync(force: false));
     }
 
     public void Recompute(bool rebuildRows)
@@ -1278,7 +1278,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             // Reading via the Steam client can rewrite the file itself - avoid a loop.
             if (_sincePoll.IsRunning && _sincePoll.Elapsed < TimeSpan.FromSeconds(10)) return;
-            if (_svc.HasApiKey || _svc.Bridge.Exists) _ = PollAsync();
+            if (_svc.Settings.HasApiKey || _svc.Bridge.Exists) _ = PollAsync();
         });
         _watcher = w;
     }
@@ -1293,7 +1293,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (IsBusy) return;
             var changes = _play.TakeChanges();
             UpdateSession();
-            if (_game is { } played && changes.Stopped.Contains(played.AppId) && _svc.HasApiKey)
+            if (_game is { } played && changes.Stopped.Contains(played.AppId) && _svc.Settings.HasApiKey)
             {
                 var session = _play.LastSession(played.AppId);
                 _ = SafeAsync(() => AfterSessionAsync(played, session));
@@ -1308,7 +1308,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         // While the game runs, poll the status (in case the stats file did not change).
         bool openRunning = _game is { } open && running.Contains(open.AppId);
-        bool canRefresh = _svc.HasApiKey || _svc.Bridge.Exists;
+        bool canRefresh = _svc.Settings.HasApiKey || _svc.Bridge.Exists;
         if (openRunning && canRefresh && !IsBusy &&
             (!_sincePoll.IsRunning || _sincePoll.Elapsed > TimeSpan.FromSeconds(Math.Max(15, _svc.Settings.PollSeconds))))
         {
@@ -1365,7 +1365,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (_game != game || IsBusy || _play.Sessions.IsRunning(game.AppId)) return;
         try
         {
-            await _svc.RefreshPlaytimeAsync(game, session);
+            await _svc.Loader.RefreshPlaytimeAsync(game, session);
         }
         catch (Exception e) when (e is SteamApiException or System.Net.Http.HttpRequestException or TaskCanceledException)
         {
@@ -1382,7 +1382,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void UpdateSession()
     {
         var now = DateTimeOffset.Now;
-        var summary = _game is { } game && _play.LastSession(game.AppId) is { } session && (_svc.HasApiKey || _svc.Bridge.Exists)
+        var summary = _game is { } game && _play.LastSession(game.AppId) is { } session && (_svc.Settings.HasApiKey || _svc.Bridge.Exists)
             ? SessionSummary.Of(game, session, _selectedPercentile.Value, now, _play.Sessions.Played(game.AppId, now))
             : null;
         // A game started and closed at once is not worth a summary.

@@ -38,7 +38,7 @@ public sealed class OverlayViewModel : ObservableObject
     {
         get
         {
-            var s = Main.Service.Settings;
+            var s = Main.Services.Settings;
             return IsInteractive
                 ? Loc.T(Main.ManualUnlocks ? "overlay.interactMark" : "overlay.interactDrag", s.OverlayInteractHotkey)
                 : Loc.T("overlay.keys", s.OverlayToggleHotkey, s.OverlayInteractHotkey);
@@ -81,7 +81,7 @@ public partial class OverlayWindow : Window
         DpiChanged += (_, _) => FitHeight();
         // A screen may have gone since it was last shown.
         IsVisibleChanged += (_, e) => { if (e.NewValue is true) KeepOnScreen(); };
-        var s = main.Service.Settings;
+        var s = main.Services.Settings;
         Left = s.OverlayLeft;
         Top = s.OverlayTop;
         ApplySettings();
@@ -99,7 +99,7 @@ public partial class OverlayWindow : Window
 
     public void ApplySettings()
     {
-        var s = _vm.Main.Service.Settings;
+        var s = _vm.Main.Services.Settings;
         var opacity = Math.Clamp(s.OverlayOpacity, 0.2, 1.0);
         OverlayPanel.Background = new SolidColorBrush(Color.FromArgb((byte)(opacity * 255), 0x14, 0x1A, 0x23));
         _vm.RefreshHints();
@@ -131,10 +131,10 @@ public partial class OverlayWindow : Window
 
     public void SavePosition()
     {
-        var s = _vm.Main.Service.Settings;
+        var s = _vm.Main.Services.Settings;
         s.OverlayLeft = Left;
         s.OverlayTop = Top;
-        _vm.Main.Service.SaveSettings();
+        _vm.Main.Services.SaveSettings();
     }
 
     private void ApplyClickThrough()

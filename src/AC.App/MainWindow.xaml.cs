@@ -25,7 +25,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         WindowFit.ToWorkArea(this);
-        _vm = new MainViewModel(GameService.CreateDefault());
+        _vm = new MainViewModel(AppServices.CreateDefault());
         DataContext = _vm;
         _vm.Toast += OnToast;
         _vm.PlayingChanged += OnPlayingChanged;
@@ -53,7 +53,7 @@ public partial class MainWindow : Window
     {
         _tray?.Dispose();
         _tray = null;
-        if (!_vm.Service.Settings.CloseToTray && !_startedInTray) return;
+        if (!_vm.Services.Settings.CloseToTray && !_startedInTray) return;
         var open = new MenuItem { Header = Loc.T("tray.open"), FontWeight = FontWeights.SemiBold };
         open.Click += (_, _) => ShowFromTray();
         var quit = new MenuItem { Header = Loc.T("tray.quit") };
@@ -80,10 +80,10 @@ public partial class MainWindow : Window
 
     private void HintTrayOnce()
     {
-        var s = _vm.Service.Settings;
+        var s = _vm.Services.Settings;
         if (s.TrayHintShown || _tray is null) return;
         s.TrayHintShown = true;
-        _vm.Service.SaveSettings();
+        _vm.Services.SaveSettings();
         _tray.ShowInfo(Loc.T("tray.hintTitle"), Loc.T("tray.hint"));
     }
 
@@ -98,7 +98,7 @@ public partial class MainWindow : Window
     {
         if (_hotkeys is null) return;
         _hotkeys.UnregisterAll();
-        var s = _vm.Service.Settings;
+        var s = _vm.Services.Settings;
         var problems = new List<string>();
         if (!_hotkeys.Register(s.OverlayToggleHotkey, ToggleOverlay)) problems.Add(s.OverlayToggleHotkey);
         if (!_hotkeys.Register(s.OverlayInteractHotkey, ToggleClickMode)) problems.Add(s.OverlayInteractHotkey);
@@ -131,7 +131,7 @@ public partial class MainWindow : Window
 
     private void OnPlayingChanged(bool playing)
     {
-        if (!_vm.Service.Settings.OverlayAuto) return;
+        if (!_vm.Services.Settings.OverlayAuto) return;
         var o = EnsureOverlay();
         if (playing && !o.IsVisible)
         {
@@ -148,7 +148,7 @@ public partial class MainWindow : Window
     /// <summary>A message mid-game shows the hidden overlay until the message goes.</summary>
     private void OnToast(string text)
     {
-        if (_vm.Service.Settings.OverlayAuto && _vm.Playing && EnsureOverlay() is { IsVisible: false } hidden)
+        if (_vm.Services.Settings.OverlayAuto && _vm.Playing && EnsureOverlay() is { IsVisible: false } hidden)
         {
             hidden.Show();
             _overlayForToast = true;
@@ -174,14 +174,14 @@ public partial class MainWindow : Window
 
     private void OnOpenSettings(object sender, RoutedEventArgs e)
     {
-        var dlg = new SettingsWindow(_vm.Service) { Owner = this };
+        var dlg = new SettingsWindow(_vm.Services) { Owner = this };
         // Off while it is open: a shortcut pressed in a hotkey box would toggle the overlay instead of getting there.
         _hotkeys?.UnregisterAll();
         bool saved = dlg.ShowDialog() == true;
         RegisterHotkeys();
         if (!saved) return;
-        Loc.SetLanguage(_vm.Service.Settings.UiLanguage);
-        ThemeManager.Apply(_vm.Service.Settings.Theme);
+        Loc.SetLanguage(_vm.Services.Settings.UiLanguage);
+        ThemeManager.Apply(_vm.Services.Settings.Theme);
         UpdateTray();
         _vm.SettingsChanged();
         _overlay?.ApplySettings();
@@ -230,7 +230,7 @@ public partial class MainWindow : Window
         KeepSaving(KeepTyped);
         KeepSaving(() => _overlay?.SavePosition());
         // Started in the tray, the icon is there whatever the setting: closing follows the setting all the same.
-        if (!_quitting && _tray is not null && _vm.Service.Settings.CloseToTray)
+        if (!_quitting && _tray is not null && _vm.Services.Settings.CloseToTray)
         {
             // Into the notification area: the app keeps watching for the game, the hotkeys and the overlay work on.
             e.Cancel = true;

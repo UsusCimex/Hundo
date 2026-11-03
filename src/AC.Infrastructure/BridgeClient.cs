@@ -69,6 +69,17 @@ public sealed class BridgeClient
         ExePath = exePath ?? Environment.ProcessPath ?? "";
     }
 
+    /// <summary>
+    /// The helper reads and writes as whoever is signed in to the Steam client: another account than the user's would
+    /// get the marks, and its status would mix into the user's. null - the same, or nothing to compare.
+    /// </summary>
+    public static string? SignedInElsewhere(ulong steamId64) =>
+        OtherAccount(SteamLocal.SignedInAccountId(), steamId64) ? Loc.T("error.otherAccount") : null;
+
+    /// <summary>The Steam client is signed in to an account, and not to this one; false - the same, or unknown.</summary>
+    internal static bool OtherAccount(uint signedIn, ulong steamId64) =>
+        signedIn != 0 && steamId64 != 0 && signedIn != SteamLocal.AccountId(steamId64);
+
     /// <summary>The helper can run; AC_NO_STEAM_CLIENT=1 turns the real one off (scripted checks must not touch Steam).</summary>
     public bool Exists => File.Exists(ExePath) && (_standIn || Environment.GetEnvironmentVariable("AC_NO_STEAM_CLIENT") != "1");
 

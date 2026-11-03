@@ -11,13 +11,13 @@ namespace AC.App;
 /// </summary>
 public sealed class LibraryViewModel : ObservableObject
 {
-    private readonly GameService _svc;
+    private readonly AppServices _svc;
     private readonly Dictionary<uint, GameSummary> _summaries;
 
-    public LibraryViewModel(GameService svc)
+    public LibraryViewModel(AppServices svc)
     {
         _svc = svc;
-        _summaries = new Dictionary<uint, GameSummary>(svc.Store.LoadSummaries());
+        _summaries = new Dictionary<uint, GameSummary>(svc.Library.Summaries());
         View = CollectionViewSource.GetDefaultView(Items);
         View.Filter = o => o is LibraryItemViewModel g &&
             (!StartedOnly || g.IsStarted) &&
