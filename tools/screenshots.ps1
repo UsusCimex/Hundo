@@ -145,6 +145,8 @@ $psi.EnvironmentVariables["AC_DATA_DIR"] = $data
 $psi.EnvironmentVariables["AC_NO_STEAM_CLIENT"] = "1"
 # Hardware rendering stops while the display is off, software rendering does not.
 $psi.EnvironmentVariables["AC_SOFTWARE_RENDERING"] = "1"
+# The build does not check the markup's bindings: their errors are printed at the end.
+$psi.EnvironmentVariables["AC_BINDING_ERRORS"] = "1"
 $p = [Diagnostics.Process]::Start($psi)
 $suffix = $Theme.ToLowerInvariant()
 try {
@@ -203,5 +205,7 @@ try {
 finally {
     if (-not $p.HasExited) { [void]$p.CloseMainWindow(); if (-not $p.WaitForExit(8000)) { $p.Kill() } }
     Start-Sleep -Milliseconds 500
+    Get-Content (Join-Path $data "app.log") -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -like "*Binding: *" } |
+        ForEach-Object { Write-Warning $_ }
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }

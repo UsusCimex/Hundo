@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Windows;
@@ -50,6 +51,13 @@ public partial class App : Application
         // Hardware rendering stops while the display is off; scripted screenshots switch to software rendering.
         if (Environment.GetEnvironmentVariable("AC_SOFTWARE_RENDERING") == "1")
             System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+        // The build does not check bindings: scripted checks of the markup read their errors from the log.
+        if (Environment.GetEnvironmentVariable("AC_BINDING_ERRORS") == "1")
+        {
+            PresentationTraceSources.Refresh();
+            PresentationTraceSources.DataBindingSource.Listeners.Add(new BindingErrorLog());
+            PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
+        }
         base.OnStartup(e);
         MainWindow window;
         try
@@ -105,5 +113,19 @@ public partial class App : Application
         AppLog.Error("UI error", e.Exception);
         MessageBox.Show(e.Exception.Message, Loc.T("dialog.errorTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         e.Handled = true;
+    }
+
+    /// <summary>WPF traces a message in parts: the header, then the rest with the line end.</summary>
+    private sealed class BindingErrorLog : TraceListener
+    {
+        private readonly StringBuilder _line = new();
+
+        public override void Write(string? message) => _line.Append(message);
+
+        public override void WriteLine(string? message)
+        {
+            AppLog.Info("Binding: " + _line.Append(message));
+            _line.Clear();
+        }
     }
 }

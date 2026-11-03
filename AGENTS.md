@@ -13,7 +13,7 @@ tools\screenshots.ps1 -DataDir <data folder> -OutDir <output> -Theme Dark -Set "
 The setup: after the publish step of `release.yml`, `ISCC.exe /DAppVersion=X.Y.Z installer\Hundo.iss` (Inno Setup 6.7) writes it to `out`.
 
 Tests are a console runner without packages: OK/FAIL per test and a total, exit code 1 on failure.
-Check UI changes with screenshots in both themes: the build passes even when the markup is broken.
+Check UI changes with screenshots in both themes: the build passes even when the markup is broken, the script prints broken bindings.
 The script works on copies of the build and of the data folder, so the real folder is fine as input.
 
 ## Safety while checking
@@ -27,6 +27,7 @@ The script works on copies of the build and of the data folder, so the real fold
 | `AC_DATA_DIR` | data folder |
 | `AC_NO_STEAM_CLIENT=1` | the app never connects to the Steam client |
 | `AC_SOFTWARE_RENDERING=1` | software rendering: hardware rendering stops while the display is off |
+| `AC_BINDING_ERRORS=1` | WPF binding errors go to `app.log`, and `tools/screenshots.ps1` prints them: the build does not check the markup |
 | `AC_UPDATE_URL` | another "latest release" JSON, for testing updates against a local server |
 | `AC_STEAM_API_URL` | another Steam Web API host, for checks against a local server: new unlocks without playing |
 | `AC_STEAM_HELPER` | a stand-in for the Steam client helper (a script that prints its JSON answer), run even with `AC_NO_STEAM_CLIENT=1`: checks of writes to Steam without Steam |
