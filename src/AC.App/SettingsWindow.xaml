@@ -147,9 +147,19 @@
                 <Border Style="{StaticResource Card}" Margin="0,12,0,0">
                     <StackPanel>
                         <TextBlock Text="{local:Tr settings.updatesTitle}" Style="{StaticResource Subtitle}" Margin="0,0,0,10" />
-                        <TextBlock x:Name="VersionText" Margin="0,0,0,10" />
-                        <CheckBox x:Name="CheckUpdatesBox" Content="{local:Tr settings.checkUpdates}" />
-                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
+                        <DockPanel>
+                            <Button x:Name="CheckUpdateButton" DockPanel.Dock="Right" Content="{local:Tr settings.checkUpdate}" Margin="12,0,0,0"
+                                    Click="OnCheckUpdate" />
+                            <TextBlock x:Name="VersionText" VerticalAlignment="Center" TextWrapping="Wrap" />
+                        </DockPanel>
+                        <DockPanel x:Name="UpdatePanel" Margin="0,10,0,0" Visibility="Collapsed">
+                            <Button x:Name="UpdateNotesButton" DockPanel.Dock="Right" Content="{local:Tr update.notes}" Margin="8,0,0,0"
+                                    Visibility="Collapsed" Click="OnUpdateNotes" />
+                            <Button x:Name="DownloadUpdateButton" DockPanel.Dock="Right" Content="{local:Tr update.download}" Margin="12,0,0,0"
+                                    Style="{DynamicResource AccentButtonStyle}" Visibility="Collapsed" Click="OnDownloadUpdate" />
+                            <TextBlock x:Name="UpdateResult" VerticalAlignment="Center" TextWrapping="Wrap" />
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,10,0,0"
                                    Text="{local:Tr settings.updatesHint}" />
                     </StackPanel>
                 </Border>

@@ -965,6 +965,17 @@ static class Tests
         Assert.True(Parse("""{"tag_name": 5, "assets": {}}""") is null, "not the expected shape");
     }
 
+    public static void Update_CheckFailsWhenGitHubGivesNoRelease()
+    {
+        // Checked by hand: an error answer must not read as "the latest version".
+        static AC.Infrastructure.UpdateService With(HttpStatusCode status, string body) => new(new HttpClient(new FakeHttp(_ => (status, body))));
+        bool threw = false;
+        try { With(HttpStatusCode.Forbidden, "rate limit exceeded").CheckAsync().GetAwaiter().GetResult(); }
+        catch (HttpRequestException) { threw = true; }
+        Assert.True(threw, "an error answer taken for no update");
+        Assert.True(With(HttpStatusCode.OK, """{"tag_name": "v0.0.1", "assets": []}""").CheckAsync().GetAwaiter().GetResult() is null, "an older release");
+    }
+
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public static void Steam_SignedInToAnotherAccount()
     {

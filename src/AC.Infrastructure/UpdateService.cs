@@ -24,14 +24,14 @@ public sealed class UpdateService(HttpClient http)
         Environment.GetEnvironmentVariable("AC_UPDATE_URL") is { Length: > 0 } url ? url
             : $"https://api.github.com/repos/{Repository}/releases/latest";
 
-    /// <summary>A newer release with a download for this copy, or null (none, offline, or the repository is private).</summary>
+    /// <summary>A newer release with a download for this copy; null - none. Throws when GitHub does not give the release.</summary>
     public async Task<UpdateInfo?> CheckAsync(CancellationToken ct = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, LatestUrl);
         request.Headers.UserAgent.ParseAdd($"Hundo/{Current}");
         request.Headers.Accept.ParseAdd("application/vnd.github+json");
         using var response = await http.SendAsync(request, ct);
-        if (!response.IsSuccessStatusCode) return null;
+        response.EnsureSuccessStatusCode();
         return Parse(await response.Content.ReadAsStringAsync(ct), Current, Installed);
     }
 

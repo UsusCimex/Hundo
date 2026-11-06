@@ -28,7 +28,6 @@ public partial class SettingsWindow : Window
         StatusSourceBox.SelectedItem = Options.StatusSources.FirstOrDefault(m => m.Value == s.StatusSource) ?? Options.StatusSources[0];
         ThemeBox.SelectedItem = Options.Themes.FirstOrDefault(t => t.Value == s.Theme) ?? Options.Themes[0];
         HideSpoilersBox.IsChecked = s.HideSpoilers;
-        CheckUpdatesBox.IsChecked = s.CheckUpdates;
         CloseToTrayBox.IsChecked = s.CloseToTray;
         StartWithWindowsBox.IsChecked = Autostart.IsOn;
         ToggleHotkeyBox.Text = s.OverlayToggleHotkey;
@@ -47,6 +46,40 @@ public partial class SettingsWindow : Window
 
     private void OnGetKey(object sender, RoutedEventArgs e) =>
         Process.Start(new ProcessStartInfo("https://steamcommunity.com/dev/apikey") { UseShellExecute = true });
+
+    private UpdateInfo? _update;
+
+    private async void OnCheckUpdate(object sender, RoutedEventArgs e)
+    {
+        CheckUpdateButton.IsEnabled = false;
+        DownloadUpdateButton.Visibility = UpdateNotesButton.Visibility = Visibility.Collapsed;
+        UpdatePanel.Visibility = Visibility.Visible;
+        UpdateResult.Text = Loc.T("settings.checking");
+        try
+        {
+            _update = await _svc.Updates.CheckAsync();
+            UpdateResult.Text = _update is { } u ? Loc.T("update.available", u.Version.ToString(3)) : Loc.T("settings.upToDate");
+        }
+        catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            _update = null;
+            AppLog.Info("Update check: " + ex.Message);
+            UpdateResult.Text = Loc.T("settings.checkFailed", ex.Message);
+        }
+        finally
+        {
+            CheckUpdateButton.IsEnabled = true;
+        }
+        if (_update is null) return;
+        DownloadUpdateButton.Visibility = Visibility.Visible;
+        if (_update.PageUrl.Length > 0) UpdateNotesButton.Visibility = Visibility.Visible;
+    }
+
+    private void OnDownloadUpdate(object sender, RoutedEventArgs e) =>
+        Process.Start(new ProcessStartInfo(_update!.DownloadUrl) { UseShellExecute = true });
+
+    private void OnUpdateNotes(object sender, RoutedEventArgs e) =>
+        Process.Start(new ProcessStartInfo(_update!.PageUrl) { UseShellExecute = true });
 
     private void OnManualUnlocksClick(object sender, RoutedEventArgs e)
     {
@@ -145,7 +178,6 @@ public partial class SettingsWindow : Window
         s.StatusSource = (StatusSourceBox.SelectedItem as Option<StatusSource>)?.Value ?? StatusSource.WebApi;
         s.Theme = (ThemeBox.SelectedItem as Option<AppTheme>)?.Value ?? AppTheme.System;
         s.HideSpoilers = HideSpoilersBox.IsChecked == true;
-        s.CheckUpdates = CheckUpdatesBox.IsChecked == true;
         s.CloseToTray = CloseToTrayBox.IsChecked == true;
         s.OverlayToggleHotkey = ToggleHotkeyBox.Text.Trim();
         s.OverlayInteractHotkey = InteractHotkeyBox.Text.Trim();
