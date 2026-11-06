@@ -269,6 +269,7 @@
   "tray.hintTitle": "Hundo keeps running",
   "tray.hint": "It keeps watching for games. To quit, right-click its icon here.",
   "settings.updatesTitle": "Updates",
+  "settings.version": "Version {0} is installed",
   "settings.checkUpdates": "Check for a new version at startup",
   "settings.updatesHint": "Looks at the latest release on GitHub. Download opens the new version in the browser: run the setup, or unpack the zip over the app folder.",
   "update.available": "Version {0} is available",

@@ -147,6 +147,7 @@
                 <Border Style="{StaticResource Card}" Margin="0,12,0,0">
                     <StackPanel>
                         <TextBlock Text="{local:Tr settings.updatesTitle}" Style="{StaticResource Subtitle}" Margin="0,0,0,10" />
+                        <TextBlock x:Name="VersionText" Margin="0,0,0,10" />
                         <CheckBox x:Name="CheckUpdatesBox" Content="{local:Tr settings.checkUpdates}" />
                         <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
                                    Text="{local:Tr settings.updatesHint}" />

@@ -39,6 +39,7 @@ public partial class SettingsWindow : Window
         PollBox.Text = s.PollSeconds.ToString(CultureInfo.InvariantCulture);
         DataDirBox.Text = AppPaths.DataRoot;
         DataDirHint.Text = AppPaths.IsPortable ? Loc.T("settings.dataPortable") : Loc.T("settings.dataHint", AppPaths.DataDirVariable);
+        VersionText.Text = Loc.T("settings.version", UpdateService.Current.ToString(3));
     }
 
     private void OnOpenDataDir(object sender, RoutedEventArgs e) =>
