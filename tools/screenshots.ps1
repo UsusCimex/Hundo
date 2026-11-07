@@ -2,10 +2,12 @@
 .SYNOPSIS
     Screenshots of the app windows for UI checks and the README.
 .DESCRIPTION
-    Works on copies: the build runs with the Steam client turned off (AC_NO_STEAM_CLIENT, so it cannot show you
-    in-game or write achievements), the data folder goes to a temp folder (the original is untouched). The data folder needs settings.json and
-    games\<appid>.json; the game from LastAppId opens. Takes the main window (sorted by plan), the time panel, the list
-    sorted by date with the chart, the overlay over the main window and the overlay alone on a transparent background.
+    Works on copies, on a desktop of its own: the app's windows never show on the screen and never take the mouse, the
+    keyboard focus or the foreground. The build runs with the Steam client turned off (AC_NO_STEAM_CLIENT, so it
+    cannot show you in-game or write achievements), the data folder goes to a temp folder (the original is untouched).
+    The data folder needs settings.json and games\<appid>.json; the game from LastAppId opens. Takes the main window
+    (sorted by plan), the time panel, the list sorted by date with the chart, the overlay over the main window and the
+    overlay alone on a transparent background.
     -Set overrides settings in the copy: "Key=value;Key=value", the value is JSON or a string.
 .EXAMPLE
     dotnet build -c Release
@@ -26,71 +28,134 @@ if (-not $Build) { $Build = Join-Path $PSScriptRoot "..\src\AC.App\bin\Release\n
 $running = (Get-ItemProperty "HKCU:\Software\Valve\Steam" -Name RunningAppID -ErrorAction SilentlyContinue).RunningAppID
 if ($running -and $running -ne 0) { throw "A game is running (AppID $running): not opening windows over it" }
 
-Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing, System.Windows.Forms
+# The script starts itself again on a desktop of its own and prints what it printed there.
+if ($env:AC_SHOTS_DESKTOP -ne "1") {
+    Add-Type -TypeDefinition @"
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class ShotsDesktop {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct STARTUPINFO {
+        public int cb; public string lpReserved; public string lpDesktop; public string lpTitle;
+        public int dwX, dwY, dwXSize, dwYSize, dwXCountChars, dwYCountChars, dwFillAttribute, dwFlags;
+        public short wShowWindow, cbReserved2; public IntPtr lpReserved2, hStdInput, hStdOutput, hStdError;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    struct PROCESS_INFORMATION { public IntPtr hProcess, hThread; public int dwProcessId, dwThreadId; }
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    static extern IntPtr CreateDesktop(string name, IntPtr device, IntPtr devmode, int flags, uint access, IntPtr sa);
+    [DllImport("user32.dll")] static extern bool CloseDesktop(IntPtr h);
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    static extern bool CreateProcess(string app, StringBuilder cmd, IntPtr pa, IntPtr ta, bool inherit, uint flags,
+        IntPtr env, string dir, ref STARTUPINFO si, out PROCESS_INFORMATION pi);
+    [DllImport("kernel32.dll")] static extern uint WaitForSingleObject(IntPtr h, uint ms);
+    [DllImport("kernel32.dll")] static extern bool GetExitCodeProcess(IntPtr h, out uint code);
+    [DllImport("kernel32.dll")] static extern bool TerminateProcess(IntPtr h, uint code);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+    // The exit code, or -1 when the process ran out of time and was ended.
+    public static int Run(string desktop, string cmd, uint timeoutMs) {
+        IntPtr d = CreateDesktop(desktop, IntPtr.Zero, IntPtr.Zero, 0, 0x10000000u, IntPtr.Zero);
+        if (d == IntPtr.Zero) throw new Win32Exception();
+        try {
+            var si = new STARTUPINFO();
+            si.cb = Marshal.SizeOf(si);
+            si.lpDesktop = "WinSta0\\" + desktop;
+            PROCESS_INFORMATION pi;
+            if (!CreateProcess(null, new StringBuilder(cmd), IntPtr.Zero, IntPtr.Zero, false, 0x08000000u, IntPtr.Zero, null, ref si, out pi))
+                throw new Win32Exception();
+            try {
+                if (WaitForSingleObject(pi.hProcess, timeoutMs) != 0) { TerminateProcess(pi.hProcess, 1); return -1; }
+                uint code;
+                GetExitCodeProcess(pi.hProcess, out code);
+                return (int)code;
+            } finally { CloseHandle(pi.hThread); CloseHandle(pi.hProcess); }
+        } finally { CloseDesktop(d); }
+    }
+}
+"@
+    function Quote([string] $s) { "'" + $s.Replace("'", "''") + "'" }
+    function Full([string] $path) { $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($path) }
+    $out = [IO.Path]::GetTempFileName()
+    $call = "& $(Quote $PSCommandPath) -DataDir $(Quote (Full $DataDir)) -OutDir $(Quote (Full $OutDir)) -Theme $Theme " +
+        "-Set $(Quote $Set) -Build $(Quote (Full $Build)) -SelectIndex $SelectIndex"
+    $body = "`$env:AC_SHOTS_DESKTOP = '1'`n" +
+        "try { $call *>&1 | Out-File -LiteralPath $(Quote $out) -Encoding utf8 -Width 500; exit 0 }`n" +
+        "catch { `$_ | Out-File -LiteralPath $(Quote $out) -Append -Encoding utf8 -Width 500; exit 1 }"
+    $shell = (Get-Process -Id $PID).Path
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($body))
+    try {
+        $code = [ShotsDesktop]::Run("HundoShots", "`"$shell`" -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded", 600000)
+        Get-Content $out -Encoding UTF8
+    }
+    finally { Remove-Item $out -ErrorAction SilentlyContinue }
+    if ($code -eq -1) {
+        # Its own cleanup did not run: end the copy it left running.
+        Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -like (Join-Path ([IO.Path]::GetTempPath()) "ac-shots-*") } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        throw "Timed out"
+    }
+    if ($code -ne 0) { throw "Failed: exit code $code" }
+    return
+}
+
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
 Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @"
 using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
+using System.Text;
 public static class Shot {
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
-    [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
-    [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
+    delegate bool EnumProc(IntPtr h, IntPtr l);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+    [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr h, uint cmd);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder b, int n);
     [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
-    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
     [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int size);
-    [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr h);
-    [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr h, IntPtr dc);
-    [DllImport("gdi32.dll")] static extern bool BitBlt(IntPtr d, int x, int y, int w, int h, IntPtr s, int sx, int sy, uint rop);
-    public static RECT Bounds(IntPtr h) { RECT v; DwmGetWindowAttribute(h, 9, out v, Marshal.SizeOf(typeof(RECT))); return v; }
-    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
-    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
-    // A window started from a hidden console, or minimized meanwhile, is restored without taking the focus.
-    public static void TopMost(IntPtr h) { if (IsIconic(h)) ShowWindow(h, 4); SetWindowPos(h, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); }
-    public static void Move(IntPtr h, int x, int y) { SetWindowPos(h, new IntPtr(-1), x, y, 0, 0, 0x0001 | 0x0010); }
-    public static void Grab(IntPtr h, string path) { uint pid; GetWindowThreadProcessId(h, out pid); GrabRect(Bounds(h), path, pid); }
-    // From the screen, not PrintWindow: that one misses images loaded after the first paint.
-    // CAPTUREBLT so the overlay (a layered window) gets in.
-    public static void GrabRect(RECT v, string path, uint pid) {
-        EnsureUncovered(v, pid);
-        using (var bmp = new Bitmap(v.R - v.L, v.B - v.T, PixelFormat.Format32bppArgb)) {
-            using (var g = Graphics.FromImage(bmp)) {
-                IntPtr dst = g.GetHdc(); IntPtr src = GetDC(IntPtr.Zero);
-                BitBlt(dst, 0, 0, bmp.Width, bmp.Height, src, v.L, v.T, 0x00CC0020 | 0x40000000);
-                ReleaseDC(IntPtr.Zero, src); g.ReleaseHdc(dst);
+    [DllImport("user32.dll")] static extern bool PrintWindow(IntPtr h, IntPtr dc, uint flags);
+    // The app's visible window that no other owns: Windows also gives the process an input indicator window here.
+    public static IntPtr MainWindow(int pid) {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows((h, l) => {
+            uint p; GetWindowThreadProcessId(h, out p);
+            if (p != pid || GetWindow(h, 4) != IntPtr.Zero || !IsWindowVisible(h)) return true;
+            var c = new StringBuilder(256);
+            GetClassName(h, c, 256);
+            if (!c.ToString().StartsWith("HwndWrapper")) return true;
+            found = h;
+            return false;
+        }, IntPtr.Zero);
+        return found;
+    }
+    // The window as it draws itself, images included, cut to its visible frame: no screen is needed.
+    public static Bitmap Grab(IntPtr h) {
+        RECT w, v;
+        GetWindowRect(h, out w);
+        if (DwmGetWindowAttribute(h, 9, out v, Marshal.SizeOf(typeof(RECT))) != 0) v = w;
+        using (var full = new Bitmap(w.R - w.L, w.B - w.T, PixelFormat.Format32bppArgb)) {
+            using (var g = Graphics.FromImage(full)) {
+                IntPtr dc = g.GetHdc();
+                PrintWindow(h, dc, 2);
+                g.ReleaseHdc(dc);
             }
-            bmp.Save(path, ImageFormat.Png);
+            return full.Clone(new Rectangle(v.L - w.L, v.T - w.T, v.R - v.L, v.B - v.T), PixelFormat.Format32bppArgb);
         }
     }
-    // A window of another app over the rect would get into the picture, private content and all.
-    static void EnsureUncovered(RECT v, uint pid) {
-        uint own = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
-        for (int i = 0; i < 8; i++)
-            for (int j = 0; j < 8; j++) {
-                var p = new POINT { X = v.L + 4 + (v.R - v.L - 8) * i / 7, Y = v.T + 4 + (v.B - v.T - 8) * j / 7 };
-                uint at; GetWindowThreadProcessId(WindowFromPoint(p), out at);
-                if (at != pid && at != own)
-                    throw new InvalidOperationException(string.Format("{0} covers the app at {1},{2}: the shot is not taken",
-                        System.Diagnostics.Process.GetProcessById((int)at).ProcessName, p.X, p.Y));
-            }
-    }
-    // The same window shot over black and over white gives its own colors and transparency.
-    public static void Matte(string onBlack, string onWhite, string path) {
-        using (var b = new Bitmap(onBlack))
-        using (var w = new Bitmap(onWhite))
-        using (var o = new Bitmap(b.Width, b.Height, PixelFormat.Format32bppArgb)) {
-            for (int y = 0; y < b.Height; y++)
-                for (int x = 0; x < b.Width; x++) {
-                    Color cb = b.GetPixel(x, y), cw = w.GetPixel(x, y);
-                    int a = 255 - Clamp((cw.R - cb.R + cw.G - cb.G + cw.B - cb.B) / 3);
-                    o.SetPixel(x, y, a == 0 ? Color.Transparent
-                        : Color.FromArgb(a, Clamp(cb.R * 255 / a), Clamp(cb.G * 255 / a), Clamp(cb.B * 255 / a)));
-                }
-            o.Save(path, ImageFormat.Png);
+    public static void Save(IntPtr h, string path) { using (var b = Grab(h)) b.Save(path, ImageFormat.Png); }
+    // The overlay's own picture over the window: a shot of the overlay has no transparency.
+    public static void SaveUnder(IntPtr h, string overlay, int x, int y, string path) {
+        using (var b = Grab(h))
+        using (var o = new Bitmap(overlay)) {
+            using (var g = Graphics.FromImage(b)) g.DrawImage(o, x, y, o.Width, o.Height);
+            b.Save(path, ImageFormat.Png);
         }
     }
-    static int Clamp(int v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
 }
 "@
 [void][Shot]::SetThreadDpiAwarenessContext([IntPtr](-4))
@@ -98,7 +163,6 @@ $AE = [System.Windows.Automation.AutomationElement]
 $TS = [System.Windows.Automation.TreeScope]
 $CT = [System.Windows.Automation.ControlType]
 function Cond($prop, $val) { New-Object System.Windows.Automation.PropertyCondition($prop, $val) }
-function Both($a, $b) { New-Object System.Windows.Automation.AndCondition($a, $b) }
 function WaitFor([scriptblock] $check, [int] $seconds, [string] $what) {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     while ($sw.Elapsed.TotalSeconds -lt $seconds) { $r = & $check; if ($r) { return $r }; Start-Sleep -Milliseconds 300 }
@@ -117,20 +181,20 @@ function SelectOption($root, $id, [int] $index) {
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("ac-shots-" + [Guid]::NewGuid().ToString("N"))
 $app = Join-Path $tmp "app"
 $data = Join-Path $tmp "data"
-# A full path: Bitmap.Save resolves a relative path against the process folder, not PowerShell's current one.
+$overlayShot = Join-Path $tmp "overlay.png"
 $OutDir = (New-Item -ItemType Directory -Force $OutDir).FullName
-Copy-Item (Resolve-Path $Build) $app -Recurse
+Copy-Item $Build $app -Recurse
 # A build without these switches would open the user's real data folder or connect to Steam.
 $latin = [Text.Encoding]::GetEncoding(28591)
 $infra = $latin.GetString([IO.File]::ReadAllBytes((Join-Path $app "AC.Infrastructure.dll")))
 foreach ($switch in "AC_DATA_DIR", "AC_NO_STEAM_CLIENT") {
     if (-not $infra.Contains($latin.GetString([Text.Encoding]::Unicode.GetBytes($switch)))) { throw "The build does not support $switch - not starting it" }
 }
-Copy-Item (Resolve-Path $DataDir) $data -Recurse
+Copy-Item $DataDir $data -Recurse
 $settingsPath = Join-Path $data "settings.json"
 $settings = Get-Content $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $settings | Add-Member -NotePropertyName Theme -NotePropertyValue $Theme -Force
-# Closed to the tray, the copy would stay running, show the tray balloon on the user's screen and leave an icon.
+# Closed to the tray, the copy would stay running and leave an icon.
 $settings | Add-Member -NotePropertyName CloseToTray -NotePropertyValue $false -Force
 foreach ($pair in ($Set -split ";" | Where-Object { $_ })) {
     $key, $value = $pair -split "=", 2
@@ -147,65 +211,47 @@ $psi.EnvironmentVariables["AC_NO_STEAM_CLIENT"] = "1"
 $psi.EnvironmentVariables["AC_SOFTWARE_RENDERING"] = "1"
 # The build does not check the markup's bindings: their errors are printed at the end.
 $psi.EnvironmentVariables["AC_BINDING_ERRORS"] = "1"
+$psi.EnvironmentVariables["AC_OVERLAY_SHOT"] = $overlayShot
 $p = [Diagnostics.Process]::Start($psi)
 $suffix = $Theme.ToLowerInvariant()
 try {
-    $hwnd = WaitFor { $p.Refresh(); if ($p.MainWindowHandle -ne 0) { $p.MainWindowHandle } } 30 "the main window"
-    [Shot]::TopMost($hwnd)
+    $hwnd = WaitFor { [Shot]::MainWindow($p.Id) | Where-Object { $_ -ne [IntPtr]::Zero } } 30 "the main window"
     $win = $AE::FromHandle($hwnd)
     $list = WaitFor { ById $win "AchievementList" } 30 "the list"
-    # Sorted by plan, the list is grouped under headings: the cards are deeper than its children.
-    $items = WaitFor { $i = $list.FindAll($TS::Descendants, (Cond $AE::ControlTypeProperty $CT::ListItem)); if ($i.Count -gt $SelectIndex) { , $i } } 60 "achievements"
-    $items[$SelectIndex].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    # Sorted by plan, the list is grouped under headings: the cards are deeper than its children. The list is built
+    # again while the game loads, and the cards found before take no selection.
+    WaitFor {
+        $i = $list.FindAll($TS::Descendants, (Cond $AE::ControlTypeProperty $CT::ListItem))
+        if ($i.Count -gt $SelectIndex) {
+            try { $i[$SelectIndex].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select(); $true }
+            catch { $false }
+        }
+    } 60 "an achievement to select" | Out-Null
     Start-Sleep -Seconds 4
-    # Other windows may have come up while waiting (the window is shot as it is on screen).
-    [Shot]::TopMost($hwnd); Start-Sleep -Milliseconds 300
-    [Shot]::Grab($hwnd, (Join-Path $OutDir "main-$suffix.png"))
+    [Shot]::Save($hwnd, (Join-Path $OutDir "main-$suffix.png"))
 
     Toggle $win "TimeTile"
     Start-Sleep -Seconds 2
-    [Shot]::TopMost($hwnd); Start-Sleep -Milliseconds 300
-    [Shot]::Grab($hwnd, (Join-Path $OutDir "time-$suffix.png"))
+    [Shot]::Save($hwnd, (Join-Path $OutDir "time-$suffix.png"))
     Toggle $win "TimeTile"
 
     # The fifth sort is by unlock date.
     SelectOption $win "SortBox" 4
     Start-Sleep -Seconds 3
-    [Shot]::TopMost($hwnd); Start-Sleep -Milliseconds 300
-    [Shot]::Grab($hwnd, (Join-Path $OutDir "history-$suffix.png"))
+    [Shot]::Save($hwnd, (Join-Path $OutDir "history-$suffix.png"))
     SelectOption $win "SortBox" 0
     (ById $win "OverlayButton").GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
-    $overlay = WaitFor { $AE::RootElement.FindFirst($TS::Children, (Both (Cond $AE::ProcessIdProperty $p.Id) (Cond $AE::AutomationIdProperty "Overlay"))) } 15 "the overlay"
-    $ovh = [IntPtr]$overlay.Current.NativeWindowHandle
-    $b = [Shot]::Bounds($hwnd)
-    # The overlay goes over the main window so nothing else gets into the shot.
-    [Shot]::Move($ovh, $b.L + 330, $b.T + 330)
-    Start-Sleep -Seconds 3
-    [Shot]::Grab($hwnd, (Join-Path $OutDir "overlay-$suffix.png"))
-
-    $ob = [Shot]::Bounds($ovh)
-    $backdrop = New-Object System.Windows.Forms.Form
-    $backdrop.FormBorderStyle = "None"; $backdrop.ShowInTaskbar = $false; $backdrop.StartPosition = "Manual"; $backdrop.AutoScaleMode = "None"
-    $backdrop.TopMost = $true
-    $backdrop.Bounds = New-Object System.Drawing.Rectangle(($ob.L - 20), ($ob.T - 20), ($ob.R - $ob.L + 40), ($ob.B - $ob.T + 40))
-    $shots = @{}
-    foreach ($color in "Black", "White") {
-        $backdrop.BackColor = [System.Drawing.Color]::$color
-        if (-not $backdrop.Visible) { $backdrop.Show() }
-        $backdrop.Refresh(); [System.Windows.Forms.Application]::DoEvents()
-        [Shot]::TopMost($ovh)
-        Start-Sleep -Milliseconds 600
-        $shots[$color] = Join-Path $tmp "overlay-$color.png"
-        [Shot]::GrabRect($ob, $shots[$color], [uint32]$p.Id)
-    }
-    $backdrop.Close()
-    [Shot]::Matte($shots["Black"], $shots["White"], (Join-Path $OutDir "overlay-alone-$suffix.png"))
+    $shown = Get-Date
+    # The app saves the overlay every second while it is shown; the first ones may come before its images.
+    WaitFor { (Test-Path $overlayShot) -and (Get-Item $overlayShot).LastWriteTime -gt $shown.AddSeconds(3) } 20 "the overlay" | Out-Null
+    Copy-Item $overlayShot (Join-Path $OutDir "overlay-alone-$suffix.png")
+    [Shot]::SaveUnder($hwnd, (Join-Path $OutDir "overlay-alone-$suffix.png"), 330, 330, (Join-Path $OutDir "overlay-$suffix.png"))
     "Done: $OutDir"
 }
 finally {
     if (-not $p.HasExited) { [void]$p.CloseMainWindow(); if (-not $p.WaitForExit(8000)) { $p.Kill() } }
     Start-Sleep -Milliseconds 500
     Get-Content (Join-Path $data "app.log") -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -like "*Binding: *" } |
-        ForEach-Object { Write-Warning $_ }
+        ForEach-Object { "WARNING: $_" }
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }

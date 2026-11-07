@@ -1,8 +1,10 @@
 using System.Collections.Specialized;
+using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using AC.Core;
 
@@ -85,6 +87,34 @@ public partial class OverlayWindow : Window
         Left = s.OverlayLeft;
         Top = s.OverlayTop;
         ApplySettings();
+        if (Environment.GetEnvironmentVariable("AC_OVERLAY_SHOT") is { Length: > 0 } shot) SaveWhileShown(shot);
+    }
+
+    /// <summary>
+    /// Saves the overlay as a PNG every second while it is shown, for tools/screenshots.ps1: a shot of the window loses
+    /// its transparency.
+    /// </summary>
+    private void SaveWhileShown(string path)
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        timer.Tick += (_, _) =>
+        {
+            if (!IsVisible || ActualWidth < 1) return;
+            var dpi = VisualTreeHelper.GetDpi(this);
+            var bitmap = new RenderTargetBitmap((int)Math.Round(ActualWidth * dpi.DpiScaleX), (int)Math.Round(ActualHeight * dpi.DpiScaleY),
+                dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+            bitmap.Render(this);
+            var png = new PngBitmapEncoder();
+            png.Frames.Add(BitmapFrame.Create(bitmap));
+            try
+            {
+                using (var file = File.Create(path + ".tmp")) png.Save(file);
+                File.Move(path + ".tmp", path, overwrite: true);
+            }
+            catch (IOException) { }
+        };
+        Closed += (_, _) => timer.Stop();
+        timer.Start();
     }
 
     protected override void OnSourceInitialized(EventArgs e)
