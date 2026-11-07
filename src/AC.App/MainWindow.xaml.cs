@@ -131,17 +131,19 @@ public partial class MainWindow : Window
 
     private void OnPlayingChanged(bool playing)
     {
+        // Hidden on its own even when the auto mode was turned off since it was shown.
+        if (!playing)
+        {
+            if (_overlayForGame || _overlayForToast) _overlay?.HideToGame();
+            _overlayForGame = _overlayForToast = false;
+            return;
+        }
         if (!_vm.Services.Settings.OverlayAuto) return;
         var o = EnsureOverlay();
-        if (playing && !o.IsVisible)
+        if (!o.IsVisible)
         {
             o.Show();
             _overlayForGame = true;
-        }
-        else if (!playing && (_overlayForGame || _overlayForToast))
-        {
-            o.HideToGame();
-            _overlayForGame = _overlayForToast = false;
         }
     }
 
