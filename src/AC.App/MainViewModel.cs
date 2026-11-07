@@ -405,10 +405,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private async Task ReadViaBridgeAsync()
     {
-        if (_game is null) return;
+        if (_game is not { } game) return;
         await Busy(Loc.T("status.readingClient"), async () =>
         {
-            var (fresh, error) = await _svc.Status.ReadViaClientAsync(_game);
+            var (fresh, error) = await _svc.Status.ReadViaClientAsync(game);
+            if (!ReferenceEquals(game, _game)) return;
             if (error != null)
             {
                 StatusMessage = Loc.T("error.client", error);
