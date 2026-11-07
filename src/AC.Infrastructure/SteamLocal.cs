@@ -50,8 +50,25 @@ public static class SteamLocal
         return running;
     }
 
-    /// <summary>The game Steam names as running in the registry; 0 - none.</summary>
-    public static uint NamedAppId() => Registry.GetValue(SteamKey, "RunningAppID", 0) is int id and > 0 ? (uint)id : 0;
+    /// <summary>
+    /// The game Steam names as running in the registry; 0 - none. Steam leaves the value when its client crashes or is
+    /// killed: it counts only while the process Steam names as its own runs.
+    /// </summary>
+    public static uint NamedAppId() =>
+        Registry.GetValue(SteamKey, "RunningAppID", 0) is int id and > 0 &&
+        Registry.GetValue(SteamKey + @"\ActiveProcess", "pid", 0) is int pid && Runs(pid, "steam") ? (uint)id : 0;
+
+    /// <summary>A process with this id runs the program (its file name without ".exe"): ids of ended ones are reused.</summary>
+    internal static bool Runs(int pid, string program)
+    {
+        if (pid <= 0) return false;
+        try
+        {
+            using var p = Process.GetProcessById(pid);
+            return string.Equals(p.ProcessName, program, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException) { return false; }
+    }
 
     /// <summary>The account signed in to the Steam client now; 0 - none, or Steam is not running.</summary>
     public static uint SignedInAccountId() =>

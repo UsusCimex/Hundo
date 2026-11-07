@@ -1018,6 +1018,19 @@ static class Tests
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Steam_ProcessIdCountsOnlyForItsProgram()
+    {
+        // Steam leaves its process id in the registry when it crashes: the id may be gone or another program's by now.
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
+        Assert.True(AC.Infrastructure.SteamLocal.Runs(self.Id, self.ProcessName), "the program runs");
+        Assert.True(!AC.Infrastructure.SteamLocal.Runs(self.Id, "steam"), "another program under the id");
+        using var ended = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c exit") { CreateNoWindow = true, UseShellExecute = false })!;
+        ended.WaitForExit();
+        Assert.True(!AC.Infrastructure.SteamLocal.Runs(ended.Id, "cmd"), "an ended process");
+        Assert.True(!AC.Infrastructure.SteamLocal.Runs(0, "steam"), "no id");
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public static void Steam_ReadsStatusOnlyWhenItMayHaveChanged()
     {
         // A read through the Steam client shows the user in the game: browsing the library must not do it each time.
