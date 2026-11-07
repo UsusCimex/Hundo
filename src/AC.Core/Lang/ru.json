@@ -472,6 +472,7 @@
   "client.protected": "защищено: ставит только сервер игры",
   "client.setFailed": "Steam не принял изменение",
   "client.storeFailed": "Steam не сохранил изменения",
+  "client.storeTimeout": "Steam не подтвердил, что сохранил изменения",
   "client.partial": "не все изменения применены",
 
   "error.client": "Клиент Steam: {0}",

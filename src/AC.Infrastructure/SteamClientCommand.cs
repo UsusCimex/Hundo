@@ -119,12 +119,13 @@ public static class SteamClientCommand
             result.Changes.Add(new BridgeChangeDto { ApiName = name, Ok = error is null, Error = error });
         }
 
-        if (result.Changes.Any(c => c.Ok) && !steam.StoreStats())
+        if (result.Changes.Any(c => c.Ok) &&
+            StoreError(steam.StoreStats(), () => steam.WaitForStoredStats(cmd.AppId, StatsTimeout)) is { } refused)
         {
             foreach (var c in result.Changes.Where(c => c.Ok))
             {
                 c.Ok = false;
-                c.Error = Loc.T("client.storeFailed");
+                c.Error = refused;
             }
         }
         steam.Flush(TimeSpan.FromSeconds(1));
@@ -133,6 +134,19 @@ public static class SteamClientCommand
         if (!result.Ok) result.Error = Loc.T("client.partial");
         return result;
     }
+
+    /// <summary>
+    /// Why the changes were not stored; null - stored. Steam takes the request at once and answers once it has stored
+    /// the stats or refused them.
+    /// </summary>
+    /// <param name="sent">Steam took the request.</param>
+    /// <param name="answer">Waits for Steam's result code (1 is OK); null - nothing came in time.</param>
+    internal static string? StoreError(bool sent, Func<int?> answer) => !sent ? Loc.T("client.storeFailed") : answer() switch
+    {
+        1 => null,
+        null => Loc.T("client.storeTimeout"),
+        int code => Loc.T("client.statsError", code),
+    };
 
     private static BridgeResultDto Fail(string error) => new() { Ok = false, Error = error };
 }

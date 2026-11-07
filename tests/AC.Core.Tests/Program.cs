@@ -1018,6 +1018,18 @@ static class Tests
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static void Bridge_WriteCountsOnceSteamStoredIt()
+    {
+        // Steam takes the request at once and answers once it has stored the stats or refused them.
+        Assert.Equal<string?>(null, AC.Infrastructure.SteamClientCommand.StoreError(true, () => 1));
+        Assert.Equal(Loc.T("client.storeTimeout"), AC.Infrastructure.SteamClientCommand.StoreError(true, () => null));
+        Assert.Equal(Loc.T("client.statsError", 8), AC.Infrastructure.SteamClientCommand.StoreError(true, () => 8));
+        bool waited = false;
+        Assert.Equal(Loc.T("client.storeFailed"), AC.Infrastructure.SteamClientCommand.StoreError(false, () => { waited = true; return 1; }));
+        Assert.True(!waited, "no answer to wait for when Steam did not take the request");
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public static void Steam_ProcessIdCountsOnlyForItsProgram()
     {
         // Steam leaves its process id in the registry when it crashes: the id may be gone or another program's by now.

@@ -459,6 +459,7 @@
   "client.protected": "protected: only the game server can grant it",
   "client.setFailed": "Steam rejected the change",
   "client.storeFailed": "Steam did not save the changes",
+  "client.storeTimeout": "Steam did not confirm it saved the changes",
   "client.partial": "not all changes were applied",
 
   "error.client": "Steam client: {0}",

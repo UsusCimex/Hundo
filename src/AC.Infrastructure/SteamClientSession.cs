@@ -23,6 +23,7 @@ internal sealed unsafe class SteamClientSession : IDisposable
     private const string UserStatsVersion = "STEAMUSERSTATS_INTERFACE_VERSION013";
     private const string AppsVersion = "STEAMAPPS_INTERFACE_VERSION008";
     private const int UserStatsReceived = 1101;
+    private const int UserStatsStored = 1102;
     private const uint LoadWithAlteredSearchPath = 0x8;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -88,16 +89,24 @@ internal sealed unsafe class SteamClientSession : IDisposable
         ((delegate* unmanaged<IntPtr, ulong, ulong>)Slot(_userStats, 15))(_userStats, steamId) != 0;
 
     /// <summary>Steam's result code for the requested stats (1 is OK), or null if nothing came in time.</summary>
-    public int? WaitForUserStats(uint appId, TimeSpan timeout)
+    public int? WaitForUserStats(uint appId, TimeSpan timeout) => WaitForResult(UserStatsReceived, appId, timeout);
+
+    /// <summary>
+    /// Steam's result code for the stats sent by <see cref="StoreStats"/> (1 is OK: stored), or null if nothing came in
+    /// time.
+    /// </summary>
+    public int? WaitForStoredStats(uint appId, TimeSpan timeout) => WaitForResult(UserStatsStored, appId, timeout);
+
+    private int? WaitForResult(int callback, uint appId, TimeSpan timeout)
     {
         int? result = null;
         var sw = Stopwatch.StartNew();
         while (result is null && sw.Elapsed < timeout)
         {
-            // The game id (8 bytes) and the result (4 bytes) open the message; the user id after them moves with packing.
+            // The game id (8 bytes) and the result (4 bytes) open both messages; the user id after them moves with packing.
             Drain(m =>
             {
-                if (m.Id == UserStatsReceived && m.ParamSize >= 12 && (ulong)Marshal.ReadInt64(m.Param) == appId)
+                if (m.Id == callback && m.ParamSize >= 12 && (ulong)Marshal.ReadInt64(m.Param) == appId)
                     result = Marshal.ReadInt32(m.Param, 8);
             });
             if (result is null) Thread.Sleep(50);
@@ -123,6 +132,7 @@ internal sealed unsafe class SteamClientSession : IDisposable
             return ((delegate* unmanaged<IntPtr, byte*, byte>)Slot(_userStats, unlocked ? 6 : 7))(_userStats, n) != 0;
     }
 
+    /// <summary>Sends the changes; true - Steam took the request, its answer comes later (<see cref="WaitForStoredStats"/>).</summary>
     public bool StoreStats() => ((delegate* unmanaged<IntPtr, byte>)Slot(_userStats, 9))(_userStats) != 0;
 
     /// <summary>Gives the client time to send stored stats before the process exits.</summary>
