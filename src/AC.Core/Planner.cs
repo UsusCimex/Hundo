@@ -157,6 +157,9 @@ public static class Planner
     {
         var rows = GameLogic.BuildRows(game, p);
         var open = rows.Where(r => !r.IsDone).ToList();
+        double pace = PaceOf(game, now ?? DateTimeOffset.Now);
+        // Ordered as the time left takes them: own estimates on the typical scale, with the percentile's margin.
+        var order = new RowOrder(r => r.EstimateMinutes is { } m && r.EstimateIsManual ? m / pace * TimeEstimator.Margin(p) : r.EstimateMinutes);
 
         var sections = new List<PlanSection>();
         foreach (var stage in Enum.GetValues<PlanStage>())
@@ -168,18 +171,17 @@ public static class Planner
                 .GroupBy(r => r.Group.Trim(), StringComparer.OrdinalIgnoreCase)
                 .Select(g =>
                 {
-                    var ordered = g.OrderBy(r => r, RowOrder.Instance).ToList();
+                    var ordered = g.OrderBy(r => r, order).ToList();
                     var longest = ordered.Where(r => r.EstimateMinutes.HasValue).Select(r => r.EstimateMinutes!.Value).DefaultIfEmpty().Max();
                     return new PlanGroup(g.Key, ordered, ordered.Any(r => r.EstimateMinutes.HasValue) ? longest : null);
                 })
                 // groups are ordered by their earliest item
-                .OrderBy(g => g.Items[0], RowOrder.Instance)
+                .OrderBy(g => g.Items[0], order)
                 .ToList();
 
             sections.Add(new PlanSection(stage, groups));
         }
 
-        double pace = PaceOf(game, now ?? DateTimeOffset.Now);
         int unknown = open.Count(r => r.EstimateMinutes is null);
         var (left, deferred) = TimeLeft(rows, p, pace);
         var wide = p == Percentile.P90 ? left : TimeLeft(GameLogic.BuildRows(game, Percentile.P90), Percentile.P90, pace).Left;
@@ -234,12 +236,7 @@ public static class Planner
     /// </summary>
     public static (Dictionary<string, double> Left, double Deferred) TimeLeft(IReadOnlyList<AchievementRow> rows, Percentile p, double pace)
     {
-        double margin = p switch
-        {
-            Percentile.P75 => TimeEstimator.P75Factor,
-            Percentile.P90 => TimeEstimator.P90Factor,
-            _ => 1,
-        };
+        double margin = TimeEstimator.Margin(p);
         var at = rows.Where(r => r.EstimateMinutes.HasValue).ToDictionary(r => r.ApiName,
             r => r.EstimateIsManual ? r.EstimateMinutes!.Value / pace * margin : r.EstimateMinutes!.Value, StringComparer.Ordinal);
         var stretches = Progress.Stretches(at.Select(kv => (kv.Key, kv.Value)));
@@ -255,21 +252,21 @@ public static class Planner
         return (left, deferred);
     }
 
-    private sealed class RowOrder : IComparer<AchievementRow>
+    /// <param name="minutes">The time of a row on the scale the plan is ordered by.</param>
+    private sealed class RowOrder(Func<AchievementRow, double?> minutes) : IComparer<AchievementRow>
     {
-        public static readonly RowOrder Instance = new();
-
         public int Compare(AchievementRow? x, AchievementRow? y)
         {
             if (ReferenceEquals(x, y)) return 0;
             if (x is null) return -1;
             if (y is null) return 1;
+            double? mx = minutes(x), my = minutes(y);
             // estimated before unestimated
-            if (x.EstimateMinutes.HasValue != y.EstimateMinutes.HasValue)
-                return x.EstimateMinutes.HasValue ? -1 : 1;
-            if (x.EstimateMinutes.HasValue)
+            if (mx.HasValue != my.HasValue)
+                return mx.HasValue ? -1 : 1;
+            if (mx.HasValue)
             {
-                int c = x.EstimateMinutes!.Value.CompareTo(y.EstimateMinutes!.Value);
+                int c = mx.Value.CompareTo(my!.Value);
                 if (c != 0) return c;
             }
             // common before rare

@@ -502,6 +502,19 @@ static class Tests
         Assert.Equal(Math.Round(600 * TimeEstimator.P90Factor, 1), Math.Round(Planner.Build(g, Percentile.P90).RemainingMinutes!.Value, 1));
     }
 
+    public static void Planner_OwnEstimateOrderedOnTheTypicalScale()
+    {
+        // At the wide margin an own estimate takes the margin in the order too, as the time left takes it.
+        var g = SampleGame();
+        GameLogic.SetKind(g, "grind", AchievementKind.Other);
+        g.Estimates["misc"] = new TimeEstimate { Source = TimeEstimator.SourceName, P50 = 500, P75 = 650, P90 = 850 };
+        g.ManualEstimates["grind"] = 600;
+        var plan = Planner.Build(g, Percentile.P90);
+        var order = plan.Ordered.Select(r => r.ApiName).ToList();
+        Assert.True(order.IndexOf("misc") < order.IndexOf("grind"), "the own estimate with the margin comes later");
+        Assert.True(plan.TimeLeft["misc"] < plan.TimeLeft["grind"], "and so does its time left");
+    }
+
     public static void Planner_CompleteGame()
     {
         var g = SampleGame();

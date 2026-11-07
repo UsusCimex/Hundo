@@ -60,7 +60,7 @@ public static class GameLogic
         }
         manual = false;
         if (route is not null && route.Minutes.TryGetValue(apiName, out var onRoute))
-            return Math.Round(onRoute * p switch { Percentile.P75 => TimeEstimator.P75Factor, Percentile.P90 => TimeEstimator.P90Factor, _ => 1 }, 1);
+            return Math.Round(onRoute * TimeEstimator.Margin(p), 1);
         return game.Estimates.TryGetValue(apiName, out var e) ? e.Get(p) : null;
     }
 
@@ -146,14 +146,19 @@ public static class GameLogic
     /// <summary>
     /// Locked achievements the player has gone past on the typical player's scale (<see cref="Progress.Behind"/>):
     /// players usually unlock them before achievements this player already has. None when achievements are marked by
-    /// time: each is marked when its time is up, so none holds the countdown of the next ones.
+    /// time: each is marked when its time is up, so none holds the countdown of the next ones. Own estimates are in the
+    /// player's own minutes: on the typical scale they are divided by the pace, as the time left takes them.
     /// </summary>
-    public static IReadOnlySet<string> Behind(GameData game, IReadOnlySet<string>? notYet = null) => game.MarkByTime
-        ? new HashSet<string>(StringComparer.Ordinal)
-        : AC.Core.Progress.Behind(game.Achievements
-            .Select(a => (a.ApiName, At: EstimateOf(game, a.ApiName, Percentile.P50, out _), Done: IsDone(game, a.ApiName, notYet)))
+    public static IReadOnlySet<string> Behind(GameData game, IReadOnlySet<string>? notYet = null)
+    {
+        if (game.MarkByTime) return new HashSet<string>(StringComparer.Ordinal);
+        double pace = game.ManualEstimates.Count > 0 ? Planner.PaceOf(game, DateTimeOffset.Now) : 1;
+        return AC.Core.Progress.Behind(game.Achievements
+            .Select(a => (a.ApiName, At: EstimateOf(game, a.ApiName, Percentile.P50, out var manual) is { } m ? manual ? m / pace : m : (double?)null,
+                Done: IsDone(game, a.ApiName, notYet)))
             .Where(a => a.At.HasValue)
             .Select(a => (a.ApiName, a.At!.Value, a.Done)), Planner.MinMarginMinutes);
+    }
 
     /// <summary>
     /// Locked missable achievements whose part of the game (chapter, act, episode) is behind the player:

@@ -24,6 +24,14 @@ public static class TimeEstimator
 
     public static bool IsValidMinutes(double minutes) => minutes is > 0 and <= MaxMinutes;
 
+    /// <summary>The margin of a percentile over the median.</summary>
+    public static double Margin(Percentile p) => p switch
+    {
+        Percentile.P75 => P75Factor,
+        Percentile.P90 => P90Factor,
+        _ => 1,
+    };
+
     public static void EstimateFromGlobalPercent(GameData game)
     {
         foreach (var key in game.Estimates.Where(kv => kv.Value.Source == SourceName).Select(kv => kv.Key).ToList())
