@@ -43,6 +43,9 @@ public static class Progress
             .Where(a => !a.Done).Select(a => a.Name).ToHashSet(StringComparer.Ordinal);
     }
 
+    /// <summary>Marks this close to another one were made together.</summary>
+    public static readonly TimeSpan MarkedTogether = TimeSpan.FromMinutes(2);
+
     /// <summary>
     /// Own minutes of play per unit of the scale; on the "minutes from the start" scale of a typical player,
     /// 2 means twice as slow. Playtime between two known moments is matched with the progress made between them,
@@ -55,6 +58,10 @@ public static class Progress
             .Select(a => (a.ApiName, At: scale(a.ApiName)))
             .Where(a => a.At.HasValue)
             .Select(a => (a.ApiName, a.At!.Value)));
+        // Marks made together were done before and entered at once: when, the marks do not tell.
+        var marks = game.States.Values.Where(s => !s.SteamUnlocked && s.ManualDone && s.ManualAt is not null)
+            .Select(s => s.ManualAt!.Value).ToList();
+        bool Together(DateTimeOffset at) => marks.Count(m => (m - at).Duration() <= MarkedTogether) > 1;
         var done = new List<(DateTimeOffset At, double Stretch)>();
         foreach (var (name, stretch) in stretches)
         {
@@ -62,7 +69,7 @@ public static class Progress
             DateTimeOffset? at = GameLogic.StatusOf(state, game.CountManualMarks) switch
             {
                 EffectiveStatus.Unlocked => state!.SteamUnlockTime ?? DateTimeOffset.MinValue,
-                EffectiveStatus.ManualDone => state!.ManualAt ?? DateTimeOffset.MinValue,
+                EffectiveStatus.ManualDone => state!.ManualAt is { } m ? Together(m) ? null : m : DateTimeOffset.MinValue,
                 _ => null,
             };
             if (at is { } t) done.Add((t, stretch));

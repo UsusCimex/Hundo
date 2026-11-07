@@ -515,6 +515,22 @@ static class Tests
         Assert.True(plan.TimeLeft["misc"] < plan.TimeLeft["grind"], "and so does its time left");
     }
 
+    public static void Progress_MarksMadeTogetherDoNotSetThePace()
+    {
+        // The slow player marks three more at once: done before, they tell nothing of the pace.
+        var g = SampleGame();
+        g.PlaytimeMinutes = 500;
+        g.StateOf("ch5").SteamUnlocked = true;
+        double pace = Planner.Build(g, Percentile.P50).Pace;
+        var at = DateTimeOffset.Now.AddMinutes(-1);
+        foreach (var name in new[] { "misc", "miss", "grind" })
+        {
+            g.StateOf(name).ManualDone = true;
+            g.StateOf(name).ManualAt = at;
+        }
+        Assert.Equal(pace, Planner.Build(g, Percentile.P50).Pace);
+    }
+
     public static void Planner_CompleteGame()
     {
         var g = SampleGame();
