@@ -93,12 +93,17 @@ public sealed class TimePanelViewModel : ObservableObject
                 game.SampleCompletionMinutes is { } sc
                     ? Loc.T("time.sampleCompleters", game.SampleCompleters, TimeEstimator.Format(sc))
                     : Loc.T("time.sampleNoCompleters"),
-                sf.ToLocalTime().ToString("d", CultureInfo.CurrentCulture))
+                sf.ToLocalTime().ToString("d", CultureInfo.CurrentCulture)) +
+              (game.Route is { } route ? " " + RouteSummary(route) : "")
             : Loc.T("time.sampleNone");
 
+    private static string RouteSummary(RouteData route) =>
+        Loc.T("time.route", route.Runs, TimeEstimator.Format(route.FirstRunMinutes));
+
     /// <summary>
-    /// Neither Steam nor Steam Hunters has percentages (a new game): collects player statistics. An attempt, failed or
-    /// not, is not repeated for a week; a collected sample is refreshed weekly in the background.
+    /// Neither Steam nor Steam Hunters has percentages (a new game): collects player statistics. A story game gets them
+    /// in the background: the route through its story comes from how players went through it (<see cref="RouteModel"/>).
+    /// An attempt, failed or not, is not repeated for a week; a collected sample is refreshed weekly in the background.
     /// </summary>
     public async Task CollectSampleIfDueAsync(GameData game, bool percentagesMissing)
     {
@@ -109,24 +114,30 @@ public sealed class TimePanelViewModel : ObservableObject
             _svc.Games.Save(game);
             await _main.SafeAsync(() => CollectSampleAsync(auto: true));
         }
+        else if (game.SampleFetchedAt is null && !tried && RouteModel.HasFinale(game))
+        {
+            _ = RefreshSampleAsync(game, story: true);
+        }
         else if (game.SampleFetchedAt is { } fetched && DateTimeOffset.Now - fetched > SampleRefresh && !tried)
         {
-            game.SampleTriedAt = DateTimeOffset.Now;
-            _svc.Games.Save(game);
             _ = RefreshSampleAsync(game);
         }
     }
 
     /// <summary>
-    /// Collects a week-old sample again without blocking the window. A much smaller fresh sample does not replace
-    /// a good one; either way the next try is in a week.
+    /// Collects a sample without blocking the window: a week-old one again, or a story game's first. A much smaller
+    /// fresh sample does not replace a good one; either way the next try is in a week. One at a time: a game opened
+    /// meanwhile is tried when opened again.
     /// </summary>
-    private async Task RefreshSampleAsync(GameData game)
+    private async Task RefreshSampleAsync(GameData game, bool story = false)
     {
         if (_sampleRefreshing) return;
         _sampleRefreshing = true;
         try
         {
+            game.SampleTriedAt = DateTimeOffset.Now;
+            _svc.Games.Save(game);
+            if (story) _main.StatusMessage = Loc.T("status.routeCollecting");
             var r = await _svc.Sample.CollectAsync(game);
             // The game may have been reopened meanwhile: apply to the current copy or the saved one, not a stale one.
             var target = _main.Game?.AppId == game.AppId ? _main.Game : _svc.Games.Cached(game.AppId);
@@ -142,11 +153,13 @@ public sealed class TimePanelViewModel : ObservableObject
             }
             if (!ReferenceEquals(target, _main.Game)) return;
             _main.Recompute(rebuildRows: true);
-            _main.StatusMessage = Loc.Plural("status.sampleDone", r.Players);
+            _main.StatusMessage = target.Route is { } route ? Loc.T("status.routeDone", RouteSummary(route))
+                : Loc.Plural("status.sampleDone", r.Players);
         }
         catch (Exception e) when (e is SteamApiException or System.Net.Http.HttpRequestException or TaskCanceledException)
         {
             AppLog.Info($"{game.AppId}: sample refresh: {e.Message}");
+            if (ReferenceEquals(game, _main.Game) && _main.StatusMessage == Loc.T("status.routeCollecting")) _main.StatusMessage = "";
         }
         finally
         {
@@ -166,7 +179,8 @@ public sealed class TimePanelViewModel : ObservableObject
             if (!ReferenceEquals(target, _main.Game)) return;
             _main.Recompute(rebuildRows: true);
             _main.StatusMessage = Loc.Plural("status.sampleDone", r.Players) +
-                                  (r.CompletionMedianMinutes is { } c ? Loc.T("status.sampleCompletion", r.Completers, TimeEstimator.Format(c)) : "");
+                                  (r.CompletionMedianMinutes is { } c ? Loc.T("status.sampleCompletion", r.Completers, TimeEstimator.Format(c)) : "") +
+                                  (target.Route is { } route ? ". " + RouteSummary(route) : "");
         });
     }
 

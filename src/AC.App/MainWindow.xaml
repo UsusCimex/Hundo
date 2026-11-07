@@ -357,6 +357,12 @@
                                 Visibility="{Binding IsProbablyMissed, Converter={StaticResource BoolToVis}}" ToolTip="{local:Tr card.missedTip}">
                             <TextBlock Text="{local:Tr card.missed}" Style="{StaticResource ChipText}" />
                         </Border>
+                        <Border Style="{StaticResource Chip}" Visibility="{Binding IsChoice, Converter={StaticResource BoolToVis}}" ToolTip="{Binding ChoiceTip}">
+                            <TextBlock Text="{local:Tr card.choice}" Style="{StaticResource ChipText}" />
+                        </Border>
+                        <Border Style="{StaticResource Chip}" Visibility="{Binding IsOtherChoice, Converter={StaticResource BoolToVis}}" ToolTip="{Binding OtherChoiceTip}">
+                            <TextBlock Text="{local:Tr card.otherChoice}" Style="{StaticResource ChipText}" />
+                        </Border>
                         <Border Style="{StaticResource Chip}" Visibility="{Binding IsOffOverlay, Converter={StaticResource BoolToVis}}">
                             <TextBlock Text="{local:Tr card.offOverlay}" Style="{StaticResource ChipText}" />
                         </Border>
@@ -890,6 +896,7 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
                                         <TextBlock Grid.Row="0" Text="{local:Tr details.percent}" Style="{StaticResource Caption}" Margin="0,0,0,6" />
                                         <TextBlock Grid.Row="0" Grid.Column="1" Margin="0,0,0,6">
@@ -898,12 +905,16 @@
                                         </TextBlock>
                                         <TextBlock Grid.Row="1" Text="{local:Tr details.estimate}" Style="{StaticResource Caption}" Margin="0,0,0,6" />
                                         <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding EstimateBoth}" Margin="0,0,0,6" TextWrapping="Wrap" ToolTip="{Binding EstimateHint}" />
-                                        <TextBlock Grid.Row="2" Text="{local:Tr details.status}" Style="{StaticResource Caption}" Margin="0,0,0,6"
+                                        <TextBlock Grid.Row="2" Text="{local:Tr details.route}" Style="{StaticResource Caption}" Margin="0,0,0,6"
+                                                   Visibility="{Binding RouteText, Converter={StaticResource EmptyToCollapsed}}" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding RouteText}" Margin="0,0,0,6" TextWrapping="Wrap"
+                                                   Visibility="{Binding RouteText, Converter={StaticResource EmptyToCollapsed}}" />
+                                        <TextBlock Grid.Row="3" Text="{local:Tr details.status}" Style="{StaticResource Caption}" Margin="0,0,0,6"
                                                    Visibility="{Binding StatusText, Converter={StaticResource EmptyToCollapsed}}" />
-                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding StatusText}" Margin="0,0,0,6"
+                                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding StatusText}" Margin="0,0,0,6"
                                                    Visibility="{Binding StatusText, Converter={StaticResource EmptyToCollapsed}}" />
-                                        <TextBlock Grid.Row="3" Text="{local:Tr details.apiName}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
-                                        <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding ApiName, Mode=OneWay}" IsReadOnly="True" />
+                                        <TextBlock Grid.Row="4" Text="{local:Tr details.apiName}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                                        <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding ApiName, Mode=OneWay}" IsReadOnly="True" />
                                     </Grid>
 
                                     <TextBlock Text="{local:Tr details.guides}" Style="{StaticResource Header}" Margin="0,16,0,6" />

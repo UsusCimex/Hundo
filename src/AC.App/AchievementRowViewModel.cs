@@ -166,7 +166,9 @@ public sealed class AchievementRowViewModel : ObservableObject
         get
         {
             var est = _owner.Game?.Estimates.GetValueOrDefault(ApiName);
-            var source = _row.EstimateIsManual ? Loc.T("estimate.own") : est?.Source switch
+            var source = _row.EstimateIsManual ? Loc.T("estimate.own")
+                : _row.Route != RoutePart.None && _owner.Game?.Route is { } route ? Loc.Plural("estimate.route", route.Runs)
+                : est?.Source switch
             {
                 AC.Core.SampleStats.SourceName => Loc.Plural("estimate.sample", est.SampleSize),
                 AC.Core.TimeEstimator.SourceName => Loc.T("estimate.model"),
@@ -239,6 +241,39 @@ public sealed class AchievementRowViewModel : ObservableObject
     }
 
     public bool IsProbablyMissed => _row.ProbablyMissed;
+
+    /// <summary>The achievements one run does not give together with this one (<see cref="RouteModel"/>).</summary>
+    private IReadOnlyList<string> Rivals => _owner.Game?.Route is { } route ? RouteModel.RivalsOf(route, ApiName) : [];
+
+    private string Quoted(IEnumerable<string> apiNames) =>
+        string.Join(", ", apiNames.Select(n => "\"" + (_owner.Game?.NameOf(n) ?? n) + "\""));
+
+    /// <summary>An outcome of a choice still open: one run does not give it together with some others.</summary>
+    public bool IsChoice => !_row.IsDone && _row.TakenInstead is null && !_row.ProbablyMissed && Rivals.Count > 0;
+
+    public string ChoiceTip => IsChoice ? Loc.T("card.choiceTip", Quoted(Rivals)) : "";
+
+    /// <summary>This run already gave an achievement that excludes this one: it takes a replay.</summary>
+    public bool IsOtherChoice => _row.TakenInstead is not null;
+
+    public string OtherChoiceTip => _row.TakenInstead is { } taken ? Loc.T("card.otherChoiceTip", Quoted([taken])) : "";
+
+    /// <summary>Its place on the route through the story: why it comes in this run or later, and what excludes it.</summary>
+    public string RouteText
+    {
+        get
+        {
+            if (_row.Route == RoutePart.None || _owner.Game?.Route is not { } route) return "";
+            var lines = new List<string>();
+            if (_row.TakenInstead is { } taken) lines.Add(Loc.T("details.routeTaken", Quoted([taken])));
+            else if (!_row.IsDone && _row.ProbablyMissed) lines.Add(Loc.T("details.routePassed"));
+            else if (!_row.IsDone && _row.Route == RoutePart.AfterStory) lines.Add(Loc.T("details.routeAfter"));
+            if (route.Items.GetValueOrDefault(ApiName) is { FirstRun: > 0 } item)
+                lines.Add(Loc.T("details.routeShare", Math.Round(item.FirstRun * 100).ToString(CultureInfo.CurrentCulture)));
+            if (_row.TakenInstead is null && Rivals.Count > 0) lines.Add(Loc.T("details.routeRivals", Quoted(Rivals)));
+            return string.Join(Environment.NewLine, lines);
+        }
+    }
 
     /// <summary>Shown in the overlay while locked; its "Hide" button takes it off.</summary>
     public bool InOverlay
@@ -355,6 +390,7 @@ public sealed class AchievementRowViewModel : ObservableObject
         nameof(GroupIsAuto), nameof(IsPendingWrite), nameof(RarityText), nameof(RarityLevel), nameof(EstimateHint),
         nameof(EstimateBoth), nameof(IsLate), nameof(InOverlay), nameof(IsOffOverlay), nameof(IsProbablyMissed),
         nameof(HasProgress), nameof(ProgressValue), nameof(ProgressText),
+        nameof(IsChoice), nameof(ChoiceTip), nameof(IsOtherChoice), nameof(OtherChoiceTip), nameof(RouteText),
     };
 
     /// <summary>Swaps the row data after a recalculation without recreating the object (keeps focus).</summary>

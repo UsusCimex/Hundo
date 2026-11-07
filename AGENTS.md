@@ -40,7 +40,7 @@ The script works on copies of the build and of the data folder, so the real fold
 
 | Project | Contents |
 | --- | --- |
-| `src/AC.Core` | models and all logic, tested without Steam: statuses and probably missed missables (`GameLogic`), kind and chapter from the text (`KindClassifier`), time estimates (`TimeEstimator`, `SampleStats`, `Progress`), plan (`Planner`), session summary (`SessionTracker`, `SessionSummary`), unlocks by day (`UnlockHistory`), quotes from guides (`GuideParser`, `GuideMatcher`), filters (`AchievementQuery`), export, tags file (`TagPack`), Steam file formats (`SteamFormats/`), texts (`Loc`, `Lang/`) |
+| `src/AC.Core` | models and all logic, tested without Steam: statuses and probably missed missables (`GameLogic`), kind and chapter from the text (`KindClassifier`), time estimates (`TimeEstimator`, `SampleStats`, `Progress`), route through the story (`RouteModel`), plan (`Planner`), session summary (`SessionTracker`, `SessionSummary`), unlocks by day (`UnlockHistory`), quotes from guides (`GuideParser`, `GuideMatcher`), filters (`AchievementQuery`), export, tags file (`TagPack`), Steam file formats (`SteamFormats/`), texts (`Loc`, `Lang/`) |
 | `src/AC.Infrastructure` | I/O: use cases, one service each, built together by `AppServices`: open games and edits to them (`Games`), loading (`GameLoader`), status (`StatusReader`), marks and writes to Steam (`MarkService`), library (`SteamLibrary`), guide quotes (`GuideTipService`), player sample (`SampleCollector`); Steam Web API, registry and Steam files (`SteamLocal`), running games (`PlayWatch`), Steam client (`SteamClientSession`, `SteamClientCommand`, `BridgeClient`), storage (`JsonStore`), data folder (`AppPaths`), error log (`AppLog`), DPAPI, Steam Hunters (`SteamHunters`), Steam guides (`SteamGuides`), machine translation (`Translator`), store art paths (`StoreAssets`), updates (`UpdateService`) |
 | `src/AC.App` | WPF UI on the built-in Fluent theme: windows; view models: the open game (`MainViewModel`) and its parts - running games and status polls (`GameWatch`), time panel (`TimePanelViewModel`), overlay lists (`OverlayLists`), session summary (`SessionViewModel`), guide tips (`GuidesViewModel`), export (`GameFilesViewModel`), update notice (`UpdateNoticeViewModel`); cached image loading (`RemoteImage`), unlock chart (`UnlockChart`), theme (`ThemeManager`), hotkeys (`Native`) |
 | `tests/AC.Core.Tests` | tests of the logic and storage |
@@ -67,7 +67,7 @@ The app was first called Achievement Companion: the data folder, the DPAPI entro
 
 | File | Contents |
 | --- | --- |
-| `games/<appid>.json` | schema, states, tags (kind, group, auto/manual source), time estimates, write queue, own playtime and playtime history, player sample |
+| `games/<appid>.json` | schema, states, tags (kind, group, auto/manual source), time estimates, write queue, own playtime and playtime history, player sample and the route through the story learned from it |
 | `summary.json` | game progress for the library, so game files are not read |
 | `settings.json` | settings; the API key is encrypted with DPAPI |
 | `library.json` | library cache |
@@ -85,7 +85,7 @@ The app was first called Achievement Companion: the data folder, the DPAPI entro
 | Time to 100% | `steamhunters.com/api/apps/<appid>`: `medianCompletionTime`, minutes, asked once a week |
 | Status | `GetPlayerAchievements` (key and public "Game details") or the Steam client; the Web API shows a write of the app late, so the write stands against its reads until it does |
 | Library | `GetOwnedGames` (key); fresh playtime of one game - the same call with `appids_filter` |
-| Own sample | authors of the game's reviews (`IUserReviewsService/GetAppReviews`, no key) and their `GetPlayerAchievements`; collected on its own only when nobody has percentages, at most once a week |
+| Own sample | authors of the game's reviews (`IUserReviewsService/GetAppReviews`, no key) and their `GetPlayerAchievements`; collected on its own when nobody has percentages or for a story game (an achievement finishes the story), at most once a week |
 | Guide quotes | `IPublishedFileService/QueryFiles` (key): guides tagged Achievements and the language, up to 5 by title, until every achievement has words; `GetSubSectionData`: sections in BBCode; pictures from its tags and links, `[previewimg]` ones from the uploads (`return_previews`), without icons by size; authors from `GetPlayerSummaries`. The content language first, then English with English names from the local schema or `GetSchemaForGame` |
 | Translation of quotes | on a click: `translate.googleapis.com/translate_a/single?client=gtx`, Google Translate's keyless web endpoint (not an official API); when it does not answer, the translator's page in the browser |
 | Store art | `store_item_assets/steam/apps/<appid>/header.jpg`; newer apps keep it in a hashed folder: `IStoreBrowseService/GetItems`, else the store's `appdetails` |
@@ -94,7 +94,7 @@ The app was first called Achievement Companion: the data folder, the DPAPI entro
 
 ### Time
 
-- Per achievement: own estimate, else measured in the sample, else the rarity model: t = T x ln(maxPct / pct) / ln(maxPct / minPct). P75 and P90 are margins of x1.3 and x1.7.
+- Per achievement: own estimate, else its place on the route through the story, else measured in the sample, else the rarity model: t = T x ln(maxPct / pct) / ln(maxPct / minPct). P75 and P90 are margins of x1.3 and x1.7.
 - T (time to 100%): manual, else Steam Hunters, else the sample median, else derived from own pace.
 - Stretch (`Progress`): on the "minutes from the start" scale every achievement owns the way from the previous one to it. Stretches of unlocked ones are the progress made, of locked ones what is left, in any order of unlocks.
 - Time left (`Planner`): the stretches of locked achievements times the pace; to one achievement, those of the locked ones up to it. Own estimates get the P75 and P90 margins too. Achievement hours show the time from the start or the time left (a setting).
@@ -103,6 +103,7 @@ The app was first called Achievement Companion: the data folder, the DPAPI entro
 - Auto mark (a setting, with manual marks on, `GameData.MarkByTime`): once the open game has run for a minute (Steam names a game while the helper reads its status), the achievement whose time is up (`Plan.Due`: the nearest one, once that play reaches its time left; at the start of a game, with nothing done, at least the least margin of 15 minutes, since the rarity model puts the most common one at 0) is marked as by "Done", so the write mode decides what goes to Steam; the next one counts from it. One whose mark the user takes back leaves the way like one gone past.
 - Pace: Steam minutes between playtime snapshots (`PlaytimeHistory`: when a game loads outside a session, after a session together with its start when the app saw it, and two weeks back from Steam) divided by the progress made between them, as a progress-weighted median. Stretches without progress (AFK, a game left open) do not count. From 1 to 3: faster than the median gives no speed-up.
 - Sample (`SampleStats`): up to 300 review authors until 80 public profiles, collected again in the background when over a week old. Minutes played by each unlock come from sessions: within one (unlocks up to 2 hours apart) the time between unlocks was played, a break counts 20 minutes; an anchor ("moment - minutes played") up to 3 hours after an unlock scales the player's minutes to Steam's, else the sample's median scale.
+- Route through the story (`RouteModel`, a story game with a sample): the first achievement that finishes the story (the game, the credits, an ending: `KindClassifier.IsFinale`) ends each sampled player's first run. The first run lasts its median minutes; an achievement's place is its median place in the first runs that gave it; achievements one first run gives together at most half as often as chance says exclude each other. In the run being played the done ones are in, story ones well before the furthest of them are passed, and of the ones ahead each is in when most first runs gave it and nothing in the run, nor a likelier rival ahead, excludes it. In the run an achievement comes at its place in the first run; the others after it, at their median place among the unlocks after the first run, over the rest of the time to 100%. The plan's stages are then this run, replays and after the story; auto marks follow the route, so one run never gets two outcomes that exclude each other.
 
 ## Rules
 

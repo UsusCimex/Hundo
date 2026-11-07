@@ -47,7 +47,11 @@ public static class GameLogic
         return newlyUnlocked;
     }
 
-    public static double? EstimateOf(GameData game, string apiName, Percentile p, out bool manual)
+    /// <summary>
+    /// Minutes from the start of the game: the player's own estimate, else the place on the route through the story
+    /// (<see cref="RouteModel"/>) with the margin of the percentile, else the stored estimate.
+    /// </summary>
+    public static double? EstimateOf(GameData game, string apiName, Percentile p, out bool manual, RoutePlan? route = null)
     {
         if (game.ManualEstimates.TryGetValue(apiName, out var m))
         {
@@ -55,19 +59,23 @@ public static class GameLogic
             return m;
         }
         manual = false;
+        if (route is not null && route.Minutes.TryGetValue(apiName, out var onRoute))
+            return Math.Round(onRoute * p switch { Percentile.P75 => TimeEstimator.P75Factor, Percentile.P90 => TimeEstimator.P90Factor, _ => 1 }, 1);
         return game.Estimates.TryGetValue(apiName, out var e) ? e.Get(p) : null;
     }
 
     public static IReadOnlyList<AchievementRow> BuildRows(GameData game, Percentile p)
     {
-        var behind = Behind(game);
-        var missed = Missed(game, behind);
+        // On a route through the story the ones passed are known by the route; no order of unlocks is needed.
+        var route = RouteModel.PlanFor(game);
+        var behind = route is null ? Behind(game) : new HashSet<string>(StringComparer.Ordinal);
+        var missed = route is null ? Missed(game, behind) : route.Passed;
         var rows = new List<AchievementRow>(game.Achievements.Count);
         foreach (var def in game.Achievements)
         {
             game.States.TryGetValue(def.ApiName, out var s);
             game.Tags.TryGetValue(def.ApiName, out var t);
-            var est = EstimateOf(game, def.ApiName, p, out var manual);
+            var est = EstimateOf(game, def.ApiName, p, out var manual, route);
             var status = StatusOf(s, game.CountManualMarks);
             var kind = t?.Kind ?? AchievementKind.Unknown;
             bool gonePast = behind.Contains(def.ApiName);
@@ -90,7 +98,9 @@ public static class GameLogic
                 gonePast,
                 s?.OffOverlay == true,
                 game.MarkByTime && status == EffectiveStatus.Locked && s?.AutoMarkedAt is not null,
-                status == EffectiveStatus.Locked && game.StatProgress.TryGetValue(def.ApiName, out var progress) ? progress : null));
+                status == EffectiveStatus.Locked && game.StatProgress.TryGetValue(def.ApiName, out var progress) ? progress : null,
+                route?.Parts.GetValueOrDefault(def.ApiName) ?? RoutePart.None,
+                status == EffectiveStatus.Locked ? route?.TakenInstead.GetValueOrDefault(def.ApiName) : null));
         }
         return rows;
     }
@@ -102,8 +112,17 @@ public static class GameLogic
     public static IReadOnlyList<string> LeftBehind(GameData game, IReadOnlyCollection<string> unlocked)
     {
         var notYet = unlocked.ToHashSet(StringComparer.Ordinal);
-        var before = Missed(game, Behind(game, notYet), notYet);
-        var now = Missed(game, Behind(game));
+        IReadOnlySet<string> before, now;
+        if (game.Route is not null)
+        {
+            before = RouteModel.PlanFor(game, notYet)?.Passed ?? new HashSet<string>();
+            now = RouteModel.PlanFor(game)?.Passed ?? new HashSet<string>();
+        }
+        else
+        {
+            before = Missed(game, Behind(game, notYet), notYet);
+            now = Missed(game, Behind(game));
+        }
         return game.Achievements.Select(a => a.ApiName).Where(n => now.Contains(n) && !before.Contains(n)).ToList();
     }
 
@@ -117,7 +136,7 @@ public static class GameLogic
     }
 
     /// <param name="notYet">Achievements just unlocked in Steam, taken as before that: done only by a manual mark.</param>
-    private static bool IsDone(GameData game, string apiName, IReadOnlySet<string>? notYet)
+    internal static bool IsDone(GameData game, string apiName, IReadOnlySet<string>? notYet)
     {
         var s = game.States.GetValueOrDefault(apiName);
         if (notYet?.Contains(apiName) == true) return game.CountManualMarks && s?.ManualDone == true;

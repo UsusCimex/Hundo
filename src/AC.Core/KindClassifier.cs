@@ -43,6 +43,13 @@ public static class KindClassifier
         @"пролог|эпилог|концовк|финальн[а-я]* босс|\bсюжет",
         Opt);
 
+    // The end of the whole story, not of a chapter: "finish the game", "see the credits", an ending.
+    private static readonly Regex Finale = new(
+        @"\b(finish(es|ed|ing)?|complet(e|es|ed|ing)|beat(s|en|ing)?|clear(s|ed|ing)?)\b[^.]{0,25}\b(the game|the story|the main story|the campaign|story mode)\b|" +
+        @"\b(see|saw|seen|watch(es|ed)?|roll(s|ed)?)\b[^.]{0,15}\bcredits\b|(?<![-\w])ending\b|" +
+        @"(пройд|пройти|прош[её]л|прошли|прошла|заверш|законч)[а-яё]*[^.]{0,25}\b(игру|сюжет|историю|кампани)|\bтитры\b|\bконцовк",
+        Opt);
+
     // "in chapter 3", "Chapter IV", "act 2" - for the automatic "one sitting" group.
     private static readonly Regex Place = new(
         @"\b(?<kind>chapter|act|episode)\s+(?<n>\d{1,3}|[ivx]{1,5})\b|" +
@@ -58,6 +65,21 @@ public static class KindClassifier
         if (Grind.IsMatch(text)) return AchievementKind.Grind;
         if (Story.IsMatch(text)) return AchievementKind.Story;
         return AchievementKind.Other;
+    }
+
+    /// <summary>The achievement finishes the story: the game, the story or the campaign, its credits or an ending.</summary>
+    /// <param name="game">
+    /// The game's name: "Finish HEAVY RAIN" names the game instead of saying "the game". Only with nothing after it:
+    /// "beat Celeste on PICO-8" is a game inside the game.
+    /// </param>
+    public static bool IsFinale(string? name, string? description, string? game)
+    {
+        if (Finale.IsMatch($"{name} {description}")) return true;
+        if (string.IsNullOrWhiteSpace(game)) return false;
+        var title = Regex.Escape(game.Trim());
+        var pattern = $@"\b(finish|complet|beat|clear)\w*\s+(the\s+)?{title}[\s\p{{P}}\p{{S}}]*$|(пройд|пройти|прош|заверш|законч)[а-яё]*\s+{title}[\s\p{{P}}\p{{S}}]*$";
+        return Regex.IsMatch(name ?? "", pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
+               Regex.IsMatch(description ?? "", pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
     /// <summary>

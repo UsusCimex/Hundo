@@ -207,6 +207,8 @@ public sealed class GameData
     /// <summary>How many of them reached 100%.</summary>
     public int SampleCompleters { get; set; }
     public DateTimeOffset? SampleFetchedAt { get; set; }
+    /// <summary>How players go through the story, learned from the player sample; null - not known.</summary>
+    public RouteData? Route { get; set; }
 
     public AchievementState StateOf(string apiName)
     {
@@ -240,6 +242,8 @@ public sealed class GameData
 /// Locked, though the app once marked it by time and still marks by time: the user took that mark back.
 /// </param>
 /// <param name="Progress">Locked and counting something: how far the count has come.</param>
+/// <param name="Route">Where it stands on the player's way through the story (<see cref="RouteModel"/>).</param>
+/// <param name="TakenInstead">Locked, and this run already gave an achievement that excludes it: that one.</param>
 public sealed record AchievementRow(
     AchievementDef Def,
     EffectiveStatus Status,
@@ -254,11 +258,16 @@ public sealed record AchievementRow(
     bool Behind = false,
     bool OffOverlay = false,
     bool AutoMarkUndone = false,
-    StatProgress? Progress = null)
+    StatProgress? Progress = null,
+    RoutePart Route = RoutePart.None,
+    string? TakenInstead = null)
 {
     public string ApiName => Def.ApiName;
     public bool IsDone => Status != EffectiveStatus.Locked;
 
-    /// <summary>Not on the way to the next ones: gone past, probably missed, or its mark by time taken back.</summary>
-    public bool Passed => !IsDone && (Behind || ProbablyMissed || AutoMarkUndone);
+    /// <summary>
+    /// Not on the way to the next ones: gone past, probably missed, or its mark by time taken back. On a route through
+    /// the story one missed in this run is still on the way: its place is on the replay.
+    /// </summary>
+    public bool Passed => !IsDone && (Behind || ProbablyMissed && Route == RoutePart.None || AutoMarkUndone);
 }

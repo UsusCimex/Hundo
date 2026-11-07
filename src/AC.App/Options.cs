@@ -130,6 +130,9 @@ public static class Options
         PlanStage.Story => Loc.T("stage.story"),
         PlanStage.Other => Loc.T("stage.other"),
         PlanStage.Grind => Loc.T("stage.grind"),
+        PlanStage.ThisRun => Loc.T("stage.thisRun"),
+        PlanStage.NextRun => Loc.T("stage.nextRun"),
+        PlanStage.AfterStory => Loc.T("stage.afterStory"),
         _ => s.ToString(),
     };
 }

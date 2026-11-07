@@ -87,6 +87,10 @@
   "card.missed": "Probably missed",
   "card.missedTip": "A later part of the game is already done, and this one is still locked",
   "card.missedShort": "missed?",
+  "card.choice": "choice",
+  "card.choiceTip": "One playthrough does not give it together with {0}",
+  "card.otherChoice": "other choice",
+  "card.otherChoiceTip": "This playthrough already gave {0}: this one takes a replay",
   "card.protected": "protected",
   "card.protectedTip": "Only the game server can grant it, so it cannot be written to Steam",
   "card.queued": "queued for Steam",
@@ -112,6 +116,10 @@
     "other": "Measured on {0} players: how long they had played when they got it"
   },
   "estimate.model": "Estimated from rarity and time to 100%",
+  "estimate.route": {
+    "one": "From how {0} player went through the story: its place on your route",
+    "other": "From how {0} players went through the story: its place on your route"
+  },
   "estimate.none": "No estimate",
   "estimate.fromStart": "{0} from the start",
   "estimate.left": "{0} left",
@@ -126,6 +134,12 @@
   "details.empty": "Select an achievement to set its type, group, estimate and note",
   "details.percent": "Players",
   "details.estimate": "Estimate",
+  "details.route": "Playthrough",
+  "details.routeTaken": "This playthrough already gave {0}: this one takes a replay",
+  "details.routePassed": "This part of the story is behind you: it takes a replay",
+  "details.routeAfter": "Players usually get it after the story",
+  "details.routeShare": "{0}% of players get it on their first playthrough",
+  "details.routeRivals": "One playthrough does not give it together with {0}",
   "details.status": "Status",
   "details.apiName": "API name",
   "details.guideSource": "Guide \"{0}\" by {1}",
@@ -181,7 +195,7 @@
   },
 
   "time.sampleTitle": "Player statistics",
-  "time.sampleHint": "Takes the authors of the game's Steam reviews with public profiles and looks at what they unlocked and when: this gives percentages and how long each achievement took. Helps when neither Steam nor Steam Hunters has percentages (as with new games). Takes up to a minute.",
+  "time.sampleHint": "Takes the authors of the game's Steam reviews with public profiles and looks at what they unlocked and when: this gives percentages and how long each achievement took. Helps when neither Steam nor Steam Hunters has percentages (as with new games). In a story game it also shows the order of the story and the choices that exclude each other, and is collected by itself. Takes up to a minute.",
   "time.needKey": "A Steam Web API key is required - enter it in settings",
   "time.collect": "Collect statistics",
   "time.sample": {
@@ -190,6 +204,7 @@
   },
   "time.sampleCompleters": "{0} reached 100%, usually in {1}",
   "time.sampleNoCompleters": "nobody has reached 100% yet",
+  "time.route": "{0} finished the story, the first playthrough takes about {1}.",
   "time.sampleNone": "No sample yet. Useful when neither Steam nor Steam Hunters has percentages or time data.",
   "time.completionTitle": "Time to 100%",
   "time.completionHint": "Per-achievement estimates come from it: the rarer an achievement, the later it is usually unlocked. Without your own value it comes from Steam Hunters, else from the player statistics or your progress.",
@@ -291,6 +306,9 @@
   "stage.story": "2. Story",
   "stage.other": "3. Other",
   "stage.grind": "4. Grind",
+  "stage.thisRun": "1. This playthrough",
+  "stage.nextRun": "2. On a replay",
+  "stage.afterStory": "3. After the story",
 
   "sort.plan": "By plan",
   "sort.time": "By time",
@@ -362,6 +380,8 @@
     "other": "Statistics collected: {0} players with public profiles"
   },
   "status.sampleCompletion": ", {0} reached 100%, usually in {1}",
+  "status.routeCollecting": "Looking at how players went through the story...",
+  "status.routeDone": "The route through the story is ready. {0}",
   "status.browserFailed": "Could not open the browser: {0}",
   "status.reloading": "Reloading achievement list and status...",
   "status.reloaded": "Achievement list and status reloaded",

@@ -157,5 +157,6 @@ public static class SampleStats
         game.SamplePlayers = r.Players;
         game.SampleCompleters = r.Completers;
         game.SampleFetchedAt = now;
+        game.Route = RouteModel.Build(game, r.Played);
     }
 }

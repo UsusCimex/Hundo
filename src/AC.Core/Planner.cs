@@ -6,6 +6,12 @@ public enum PlanStage
     Story = 2,
     Other = 3,
     Grind = 4,
+    /// <summary>On a route through the story (<see cref="RouteModel"/>): comes in the run being played.</summary>
+    ThisRun = 5,
+    /// <summary>On a route: takes a replay.</summary>
+    NextRun = 6,
+    /// <summary>On a route: not tied to the story.</summary>
+    AfterStory = 7,
 }
 
 /// <summary>A "can be done in one sitting" group.</summary>
@@ -128,8 +134,9 @@ public readonly record struct Countdown(double? Minutes, bool Late, bool Passed 
 
 /// <summary>
 /// Order planner.
-/// 1) missable, 2) story, 3) other, 4) grind. Within a stage - by time estimate from the start of the game,
-/// without an estimate - by global % descending. Groups by the Group label.
+/// 1) missable, 2) story, 3) other, 4) grind; on a route through the story instead this run, replays, after the story.
+/// Within a stage - by time estimate from the start of the game, without an estimate - by global % descending.
+/// Groups by the Group label.
 /// </summary>
 public static class Planner
 {
@@ -152,9 +159,9 @@ public static class Planner
         var open = rows.Where(r => !r.IsDone).ToList();
 
         var sections = new List<PlanSection>();
-        foreach (var stage in new[] { PlanStage.Missable, PlanStage.Story, PlanStage.Other, PlanStage.Grind })
+        foreach (var stage in Enum.GetValues<PlanStage>())
         {
-            var items = open.Where(r => StageOf(r.Kind) == stage).ToList();
+            var items = open.Where(r => StageOf(r) == stage).ToList();
             if (items.Count == 0) continue;
 
             var groups = items
@@ -193,11 +200,21 @@ public static class Planner
     /// </summary>
     public static double PaceOf(GameData game, DateTimeOffset now)
     {
-        var typical = game.Estimates.Values.Select(e => e.P50 ?? 0).DefaultIfEmpty().Max();
-        var own = Progress.MinutesPerUnit(game, name => game.Estimates.GetValueOrDefault(name)?.P50, now,
-            minProgress: Math.Max(30, typical / 10));
+        var route = RouteModel.PlanFor(game);
+        double? Typical(string name) => route is not null && route.Minutes.TryGetValue(name, out var m) ? m : game.Estimates.GetValueOrDefault(name)?.P50;
+        var typical = game.Achievements.Select(a => Typical(a.ApiName) ?? 0).DefaultIfEmpty().Max();
+        var own = Progress.MinutesPerUnit(game, Typical, now, minProgress: Math.Max(30, typical / 10));
         return own is { } o ? Math.Clamp(o, 1, MaxPace) : 1;
     }
+
+    /// <summary>The stage of a row: by its place on the route through the story, else by its kind.</summary>
+    public static PlanStage StageOf(AchievementRow row) => row.Route switch
+    {
+        RoutePart.ThisRun => PlanStage.ThisRun,
+        RoutePart.NextRun => PlanStage.NextRun,
+        RoutePart.AfterStory => PlanStage.AfterStory,
+        _ => StageOf(row.Kind),
+    };
 
     public static PlanStage StageOf(AchievementKind kind) => kind switch
     {

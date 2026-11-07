@@ -2536,6 +2536,134 @@ static class Tests
         Assert.Equal(60.0, g.Estimates["b"].P50!.Value); // the model did not overwrite the measurement
         Assert.Equal(SampleStats.SourceName, g.Estimates["b"].Source);
         Assert.Equal(150.0, g.UsedCompletionMinutes);
+        Assert.Equal<RouteData?>(null, g.Route); // nothing finishes the story
+    }
+
+    public static void KindClassifier_FindsTheFinale()
+    {
+        Assert.True(KindClassifier.IsFinale("THIS IS MY STORY", "Finish the game once", "Detroit"), "finish the game");
+        Assert.True(KindClassifier.IsFinale("ЭТО МОЯ ИСТОРИЯ", "Вы прошли игру один раз", "Detroit"), "прошли игру");
+        Assert.True(KindClassifier.IsFinale("Hero", "Finish HEAVY RAIN™", "Heavy Rain"), "the game by its name");
+        Assert.True(KindClassifier.IsFinale("Bittersweet", "Get the good ending", "X"), "an ending");
+        Assert.True(KindClassifier.IsFinale("Roll", "See the credits", "X"), "the credits");
+        Assert.True(!KindClassifier.IsFinale("Act I", "Complete chapter 3", "X"), "a chapter");
+        Assert.True(!KindClassifier.IsFinale("Глава 1", "Пройдите главу 1", "X"), "глава");
+        Assert.True(!KindClassifier.IsFinale("Tale", "Read the never-ending story", "X"), "never-ending");
+        Assert.True(!KindClassifier.IsFinale("Collector", "Collect all 300 feathers", "X"), "a collectible");
+        Assert.True(!KindClassifier.IsFinale("Настоящий игрок", "Пройти Celeste на PICO-8", "Celeste"), "a game inside the game");
+    }
+
+    /// <summary>
+    /// A story with a fork: everyone gets the start, the middle and the end in the first run; at the fork 60% go
+    /// left and 40% right, and some get the other side on a replay; the collectible comes after the story.
+    /// </summary>
+    static (GameData Game, List<IReadOnlyDictionary<string, double>> Players) ForkedStory()
+    {
+        var g = new GameData { AppId = 7, Name = "Forked", CompletionMinutes = 2000 };
+        void Add(string id, string name, string desc, double pct) =>
+            g.Achievements.Add(new AchievementDef { ApiName = id, Name = name, Description = desc, GlobalPercent = pct });
+        Add("start", "Hello", "Play the first chapter", 90);
+        Add("left", "Left", "Took the left road", 50);
+        Add("right", "Right", "Took the right road", 40);
+        Add("middle", "Middle", "Reached the city", 80);
+        Add("end", "The End", "Finish the game", 70);
+        Add("all", "Collector", "Collect all 300 feathers", 5);
+        GameLogic.AutoClassify(g);
+        TimeEstimator.EstimateFromGlobalPercent(g);
+        var players = new List<IReadOnlyDictionary<string, double>>();
+        for (int i = 0; i < 20; i++)
+        {
+            // runs of 500 to 595 minutes; the fork at a fifth of the run, the city at two thirds
+            double run = 500 + 5 * i;
+            var p = new Dictionary<string, double> { ["start"] = 10, ["middle"] = run * 2 / 3, ["end"] = run };
+            p[i < 12 ? "left" : "right"] = run / 5;
+            if (i % 4 == 0) p[i < 12 ? "right" : "left"] = run + 100;
+            if (i % 2 == 0) p["all"] = run + 400;
+            players.Add(p);
+        }
+        return (g, players);
+    }
+
+    public static void RouteModel_LearnsTheStory()
+    {
+        var (g, players) = ForkedStory();
+        var route = RouteModel.Build(g, players)!;
+        Assert.Equal("end", route.Finales.Single());
+        Assert.Equal(20, route.Runs);
+        Assert.Equal(548.0, route.FirstRunMinutes);
+        Assert.Equal(0.6, route.Items["left"].FirstRun);
+        Assert.Equal(0.2, route.Items["left"].Position!.Value);
+        Assert.True(route.Items["middle"].Position > route.Items["left"].Position, "the city after the fork");
+        Assert.Equal<double?>(null, route.Items["all"].Position);
+        Assert.True(route.Excludes.Any(p => p.Contains("left") && p.Contains("right")), "the two roads exclude each other");
+        Assert.True(!route.Excludes.Any(p => p.Contains("middle")), "the city goes with either road");
+        Assert.Equal<RouteData?>(null, RouteModel.Build(g, players.Take(RouteModel.MinRuns - 1).ToList()));
+    }
+
+    public static void RouteModel_PlansTheRun()
+    {
+        var (g, players) = ForkedStory();
+        g.Route = RouteModel.Build(g, players);
+
+        // Nothing done: the likelier road is in this run, the other one after the story.
+        var plan = RouteModel.PlanFor(g)!;
+        Assert.Equal(RoutePart.ThisRun, plan.Parts["left"]);
+        Assert.Equal(RoutePart.NextRun, plan.Parts["right"]);
+        Assert.Equal(RoutePart.AfterStory, plan.Parts["all"]);
+        Assert.Equal(Math.Round(0.2 * g.Route!.FirstRunMinutes, 1), plan.Minutes["left"]);
+        Assert.True(plan.Minutes["right"] > plan.Minutes["end"], "the other road comes after the end");
+        var rows = GameLogic.BuildRows(g, Percentile.P50);
+        Assert.Equal(plan.Minutes["middle"], rows.Single(r => r.ApiName == "middle").EstimateMinutes);
+        Assert.Equal(PlanStage.ThisRun, Planner.StageOf(rows.Single(r => r.ApiName == "left")));
+
+        // Took the right road: the left one is the other choice, for a replay.
+        g.StateOf("start").SteamUnlocked = true;
+        g.StateOf("right").SteamUnlocked = true;
+        plan = RouteModel.PlanFor(g)!;
+        Assert.Equal("right", plan.TakenInstead["left"]);
+        Assert.Equal(RoutePart.NextRun, plan.Parts["left"]);
+        Assert.Equal(RoutePart.ThisRun, plan.Parts["middle"]);
+        Assert.Equal("right", GameLogic.BuildRows(g, Percentile.P50).Single(r => r.ApiName == "left").TakenInstead);
+
+        // Reached the city without either road: both were passed by; the report names them.
+        var past = ForkedStory().Game;
+        past.Route = g.Route;
+        past.StateOf("start").SteamUnlocked = true;
+        past.StateOf("middle").SteamUnlocked = true;
+        plan = RouteModel.PlanFor(past)!;
+        Assert.True(plan.Passed.Contains("left") && plan.Passed.Contains("right"), "both roads passed by");
+        Assert.True(GameLogic.BuildRows(past, Percentile.P50).Single(r => r.ApiName == "left").ProbablyMissed, "missed in this run");
+        Assert.True(Planner.Build(past, Percentile.P50).TimeLeft.ContainsKey("left"), "still on the way, on a replay");
+        Assert.Equal("left,right", string.Join(",", GameLogic.LeftBehind(past, ["middle"])));
+
+        // Finished: nothing is in this run any more.
+        past.StateOf("end").SteamUnlocked = true;
+        plan = RouteModel.PlanFor(past)!;
+        Assert.True(plan.Finished && new[] { "left", "right", "all" }.All(n => plan.Parts[n] != RoutePart.ThisRun), "nothing left for this run");
+    }
+
+    public static void RouteModel_MarksOneRoadByTime()
+    {
+        var (g, players) = ForkedStory();
+        g.Route = RouteModel.Build(g, players);
+        g.MarkByTime = true;
+        void Mark(string name)
+        {
+            g.StateOf(name).ManualDone = true;
+            g.StateOf(name).ManualAt = DateTimeOffset.Now;
+            g.StateOf(name).AutoMarkedAt = DateTimeOffset.Now;
+        }
+        var marked = new List<string>();
+        for (int i = 0; i < 6; i++)
+        {
+            var plan = Planner.Build(g, Percentile.P50);
+            if (plan.Due(double.MaxValue) is not { } next) break;
+            marked.Add(next);
+            Mark(next);
+        }
+        // The run, then the other road as a replay and the collectible.
+        Assert.Equal("start,left,middle,end", string.Join(",", marked.Take(4)));
+        Assert.True(marked.IndexOf("right") > marked.IndexOf("end"), "the other road after the end");
     }
 }
 

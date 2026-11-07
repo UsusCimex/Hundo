@@ -721,7 +721,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     subsection = ListSection.None;
                     break;
                 case SortMode.Plan:
-                    var stage = Planner.StageOf(r.Kind);
+                    var stage = Planner.StageOf(r);
                     section = Heading("stage " + stage, Options.StageTitle(stage));
                     Time(section, r.ApiName);
                     // As the planner groups them: by the trimmed name, ignoring case.
