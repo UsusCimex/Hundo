@@ -159,6 +159,7 @@
                                     Style="{DynamicResource AccentButtonStyle}" Visibility="Collapsed" Click="OnDownloadUpdate" />
                             <TextBlock x:Name="UpdateResult" VerticalAlignment="Center" TextWrapping="Wrap" />
                         </DockPanel>
+                        <CheckBox x:Name="CheckUpdatesBox" Content="{local:Tr settings.checkUpdates}" Margin="0,10,0,0" />
                         <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,10,0,0"
                                    Text="{local:Tr settings.updatesHint}" />
                     </StackPanel>

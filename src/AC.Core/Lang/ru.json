@@ -276,6 +276,7 @@
   "settings.updatesTitle": "Обновления",
   "settings.version": "Установлена версия {0}",
   "settings.checkUpdate": "Проверить обновления",
+  "settings.checkUpdates": "Проверять новую версию при запуске",
   "settings.checking": "Проверяю...",
   "settings.upToDate": "Это последняя версия",
   "settings.checkFailed": "Не получилось проверить: {0}",

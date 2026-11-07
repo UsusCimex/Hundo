@@ -31,6 +31,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Time = new TimePanelViewModel(this, svc);
         Overlay = new OverlayLists(this, svc);
         Session = new SessionViewModel(this, svc);
+        Update = new UpdateNoticeViewModel(this, svc);
         Guides = new GuidesViewModel(this, svc);
         Files = new GameFilesViewModel(this, svc);
         Library.Picked += game => _ = SafeAsync(() => LoadAsync(game.AppId, game.Name));
@@ -61,6 +62,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public TimePanelViewModel Time { get; }
     public OverlayLists Overlay { get; }
     public SessionViewModel Session { get; }
+    public UpdateNoticeViewModel Update { get; }
     public GuidesViewModel Guides { get; }
     public GameFilesViewModel Files { get; }
 
@@ -297,6 +299,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var last = _svc.Settings.LastAppId;
         var start = running.Count == 0 || running.Contains(last) ? last : PlayWatch.Followed(running);
         if (start != 0) await SafeAsync(() => LoadAsync(start, Library.NameOf(start)));
+        await SafeAsync(Update.CheckAsync);
     }
 
     private async Task RefreshLibraryAsync()
@@ -596,6 +599,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(QueueVisible));
         OnPropertyChanged(nameof(HasApiKey));
         OnPropertyChanged(nameof(QueueText));
+        Update.RefreshText();
         Library.RefreshTexts();
         Watch.WatchStatsFile(_game);
         Recompute(rebuildRows: true);

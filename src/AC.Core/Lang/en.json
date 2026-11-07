@@ -271,6 +271,7 @@
   "settings.updatesTitle": "Updates",
   "settings.version": "Version {0} is installed",
   "settings.checkUpdate": "Check for updates",
+  "settings.checkUpdates": "Check for a new version at startup",
   "settings.checking": "Checking...",
   "settings.upToDate": "This is the latest version",
   "settings.checkFailed": "Could not check: {0}",
