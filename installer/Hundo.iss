@@ -3,6 +3,7 @@
   #define AppVersion "0.0.0"
 #endif
 #define AppExe "Hundo.exe"
+#define RunKey "Software\Microsoft\Windows\CurrentVersion\Run"
 #define SideImages "side-202.png,side-404.png"
 #define SmallImages "small-58.png,small-77.png,small-97.png,small-124.png"
 
@@ -57,3 +58,15 @@ Name: "{autodesktop}\Hundo"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,Hundo}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// "Start with Windows" leaves the app's value under the user's Run key: it goes with the app, unless it starts
+// another copy.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Command: String;
+begin
+  if (CurUninstallStep = usUninstall) and RegQueryStringValue(HKCU, '{#RunKey}', 'Hundo', Command) and
+     (Pos(Lowercase(ExpandConstant('"{app}\{#AppExe}"')), Lowercase(Command)) = 1) then
+    RegDeleteValue(HKCU, '{#RunKey}', 'Hundo');
+end;
