@@ -18,16 +18,18 @@ public sealed record SampleResult(
     Dictionary<string, double> Percent,
     Dictionary<string, TimeEstimate> Times,
     double? CompletionMedianMinutes,
-    int Completers);
+    int Completers)
+{
+    /// <summary>Each player's minutes of play at each of their unlocks: what the route model learns from.</summary>
+    public IReadOnlyList<IReadOnlyDictionary<string, double>> Played { get; init; } = [];
+}
 
 /// <summary>
 /// Our own statistics from a player sample (when Steam has no global percentages and sites have no completion times).
 ///
 /// Percent = share of sampled players who unlocked the achievement.
-/// Time: for each player we know when they unlocked the achievement and two playtime anchor points
-/// (at the review, and the total at the last launch). Assuming even play between the points,
-/// the unlock time is converted to "minutes played by then". Across players we take the median and percentiles.
-/// This is an estimate: the sample is review authors, who usually play more than average.
+/// Time: the minutes each player had played by each unlock (<see cref="PlayedMinutes"/>); across players the median
+/// and percentiles. This is an estimate: the sample is review authors, who usually play more than average.
 /// </summary>
 public static class SampleStats
 {
@@ -39,22 +41,13 @@ public static class SampleStats
         var minutes = allApiNames.ToDictionary(n => n, _ => new List<double>(), StringComparer.Ordinal);
         var completions = new List<double>();
         int n = players.Count;
+        var played = PlayedMinutes(players);
 
-        foreach (var p in players)
+        foreach (var p in played)
         {
-            if (p.Unlocks.Count == 0) continue;
-            var curve = BuildCurve(p);
-            foreach (var (name, at) in p.Unlocks)
-            {
-                if (!minutes.TryGetValue(name, out var list)) continue;
-                var m = curve(at);
-                if (m is not null) list.Add(m.Value);
-            }
-            if (allApiNames.Count > 0 && allApiNames.All(p.Unlocks.ContainsKey))
-            {
-                var last = p.Unlocks.Values.Max();
-                if (curve(last) is { } done) completions.Add(done);
-            }
+            foreach (var (name, m) in p)
+                if (minutes.TryGetValue(name, out var list)) list.Add(m);
+            if (allApiNames.Count > 0 && allApiNames.All(p.ContainsKey)) completions.Add(p.Values.Max());
         }
 
         foreach (var name in allApiNames)
@@ -80,37 +73,67 @@ public static class SampleStats
 
         completions.Sort();
         double? completion = completions.Count >= 2 ? Math.Round(Quantile(completions, 0.5), 0) : null;
-        return new SampleResult(n, percent, times, completion, completions.Count);
+        return new SampleResult(n, percent, times, completion, completions.Count) { Played = played };
     }
 
-    /// <summary>Minutes played by a given moment, from the anchor points (piecewise linear, 0 at the first unlock).</summary>
-    internal static Func<DateTimeOffset, double?> BuildCurve(PlayerSample p)
-    {
-        var first = p.Unlocks.Values.Min();
-        var pts = new List<(double T, double M)> { (first.ToUnixTimeSeconds(), 0) };
-        foreach (var (at, played) in p.Anchors.Where(a => a.PlayedMinutes > 0).OrderBy(a => a.At))
-        {
-            var t = at.ToUnixTimeSeconds();
-            if (t <= pts[^1].T) continue;
-            pts.Add((t, Math.Max(pts[^1].M, played)));
-        }
-        if (pts.Count < 2) return _ => null; // nothing to anchor the time to
+    /// <summary>A longer pause between two unlocks is a break between sessions, not play.</summary>
+    public static readonly TimeSpan SessionGap = TimeSpan.FromHours(2);
 
-        return at =>
+    /// <summary>The play counted for a break: the start of the next session before its first unlock.</summary>
+    public const double BridgeMinutes = 20;
+
+    /// <summary>
+    /// Steam's minutes per minute between unlocks when no anchor tells: the play before a session's first unlock and
+    /// after its last one does not show between unlocks.
+    /// </summary>
+    public const double DefaultScale = 1.5;
+
+    /// <summary>An anchor this soon after an unlock tells how much the player had played by it.</summary>
+    private static readonly TimeSpan AnchorNear = TimeSpan.FromHours(3);
+
+    /// <summary>
+    /// Minutes each player had played by each unlock, 0 at the first one. Within a session the time between unlocks
+    /// was played; a break counts <see cref="BridgeMinutes"/>: calendar time would count the nights and weeks between
+    /// sessions. An anchor soon after an unlock scales the player's minutes to what Steam counted; without one, the
+    /// sample's median scale.
+    /// </summary>
+    public static List<IReadOnlyDictionary<string, double>> PlayedMinutes(IReadOnlyList<PlayerSample> players)
+    {
+        var sessions = players.Select(p => Sessions(p.Unlocks)).ToList();
+        var scales = players.Select((p, i) => ScaleOf(p, sessions[i])).ToList();
+        var known = scales.OfType<double>().OrderBy(k => k).ToList();
+        double common = known.Count > 0 ? Math.Max(1, Quantile(known, 0.5)) : DefaultScale;
+        return sessions.Select((m, i) => (IReadOnlyDictionary<string, double>)m.ToDictionary(
+            kv => kv.Key, kv => Math.Round(kv.Value * (scales[i] ?? common), 1), StringComparer.Ordinal)).ToList();
+    }
+
+    /// <summary>Minutes between unlocks, sessions apart joined by <see cref="BridgeMinutes"/>.</summary>
+    private static Dictionary<string, double> Sessions(IReadOnlyDictionary<string, DateTimeOffset> unlocks)
+    {
+        var result = new Dictionary<string, double>(StringComparer.Ordinal);
+        double total = 0;
+        DateTimeOffset? previous = null;
+        foreach (var (name, at) in unlocks.OrderBy(kv => kv.Value))
         {
-            double t = at.ToUnixTimeSeconds();
-            if (t <= pts[0].T) return 0;
-            for (int i = 1; i < pts.Count; i++)
-            {
-                if (t <= pts[i].T)
-                {
-                    var (t0, m0) = pts[i - 1];
-                    var (t1, m1) = pts[i];
-                    return m0 + (m1 - m0) * (t - t0) / (t1 - t0);
-                }
-            }
-            return pts[^1].M; // unlocked after the last point: known only to be at most the total playtime
-        };
+            if (previous is { } p) total += at - p <= SessionGap ? (at - p).TotalMinutes : BridgeMinutes;
+            result[name] = total;
+            previous = at;
+        }
+        return result;
+    }
+
+    /// <summary>Steam's minutes per counted minute, from the latest anchor soon after an unlock; null - none.</summary>
+    private static double? ScaleOf(PlayerSample p, Dictionary<string, double> sessions)
+    {
+        double? scale = null;
+        foreach (var (at, minutes) in p.Anchors.Where(a => a.PlayedMinutes > 0).OrderBy(a => a.At))
+        {
+            var before = p.Unlocks.Where(kv => kv.Value <= at).OrderBy(kv => kv.Value).LastOrDefault();
+            if (before.Key is null || at - before.Value > AnchorNear) continue;
+            double counted = sessions[before.Key] + (at - before.Value).TotalMinutes;
+            if (counted >= 30) scale = minutes / counted;
+        }
+        return scale;
     }
 
     private static double Quantile(List<double> sorted, double q)

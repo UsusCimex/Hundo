@@ -2496,20 +2496,23 @@ static class Tests
     public static void SampleStats_PercentAndTimes()
     {
         var t0 = DateTimeOffset.FromUnixTimeSeconds(1_760_000_000);
-        PlayerSample P(int hoursTotal, params (string Name, double HoursIn)[] unl)
+        PlayerSample P((double Minutes, double At)? anchor, params (string Name, double MinutesIn)[] unl)
         {
-            // every real hour is exactly 60 minutes of play, to check the conversion
             var p = new PlayerSample();
-            foreach (var (n, h) in unl) p.Unlocks[n] = t0.AddHours(h);
-            p.Anchors.Add((t0.AddHours(hoursTotal), hoursTotal * 60));
+            foreach (var (n, m) in unl) p.Unlocks[n] = t0.AddMinutes(m);
+            if (anchor is { } a) p.Anchors.Add((t0.AddMinutes(a.At), a.Minutes));
             return p;
         }
         var players = new List<PlayerSample>
         {
-            P(10, ("a", 0), ("b", 2), ("c", 10)),
-            P(10, ("a", 0), ("b", 4), ("c", 8)),
-            P(5, ("a", 0), ("b", 3)),
-            P(5, ("a", 0)),
+            // one session each, Steam counting the same minutes
+            P((120, 120), ("a", 0), ("b", 60), ("c", 120)),
+            P((180, 180), ("a", 0), ("b", 90), ("c", 180)),
+            // three days apart: the break counts as the bridge, and Steam's 120 minutes by 40 minutes after b say
+            // every counted minute was two
+            P((120, 3 * 1440 + 40), ("a", 0), ("b", 3 * 1440)),
+            // no anchor: the median scale
+            P(null, ("a", 0)),
         };
         var names = new[] { "a", "b", "c" };
         var r = SampleStats.Compute(players, names);
@@ -2517,9 +2520,10 @@ static class Tests
         Assert.Equal(100.0, r.Percent["a"]);
         Assert.Equal(75.0, r.Percent["b"]);
         Assert.Equal(50.0, r.Percent["c"]);
-        Assert.Equal(180.0, r.Times["b"].P50!.Value); // median of 2, 3 and 4 hours
+        Assert.Equal(2 * SampleStats.BridgeMinutes, r.Played[2]["b"]);
+        Assert.Equal(60.0, r.Times["b"].P50!.Value); // median of 60, 90 and 40
         Assert.Equal(2, r.Completers);
-        Assert.Equal(540.0, r.CompletionMedianMinutes); // 8 and 10 hours
+        Assert.Equal(150.0, r.CompletionMedianMinutes); // 120 and 180
 
         var g = SampleGame();
         g.Achievements.Clear();
@@ -2529,9 +2533,9 @@ static class Tests
         TimeEstimator.EstimateFromGlobalPercent(g);
         Assert.Equal(75.0, g.Achievements[1].Percent);
         Assert.True(g.Achievements[1].PercentFromSample);
-        Assert.Equal(180.0, g.Estimates["b"].P50!.Value); // the model did not overwrite the measurement
+        Assert.Equal(60.0, g.Estimates["b"].P50!.Value); // the model did not overwrite the measurement
         Assert.Equal(SampleStats.SourceName, g.Estimates["b"].Source);
-        Assert.Equal(540.0, g.UsedCompletionMinutes);
+        Assert.Equal(150.0, g.UsedCompletionMinutes);
     }
 }
 
