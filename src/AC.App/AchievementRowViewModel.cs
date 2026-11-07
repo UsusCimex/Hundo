@@ -356,6 +356,14 @@ public sealed class AchievementRowViewModel : ObservableObject
         }
     }
 
+    /// <summary>A note written in another row of the same achievement.</summary>
+    internal void ShowNote(string note)
+    {
+        if (_note == note) return;
+        _note = note;
+        OnPropertyChanged(nameof(Note));
+    }
+
     /// <summary>Manual estimate in hours, empty - automatic.</summary>
     public string EstimateInput
     {

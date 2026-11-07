@@ -537,6 +537,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         if (_game is null) return;
         _svc.Games.SetNote(_game, row.ApiName, note);
+        foreach (var vm in Overlay.Nearest.Concat(Overlay.Missable))
+            if (vm.ApiName == row.ApiName) vm.ShowNote(note);
     }
 
     internal void OnInOverlayChanged(AchievementRowViewModel row, bool inOverlay)
